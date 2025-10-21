@@ -1,6 +1,6 @@
 import React from 'react';
-import { FAKE_POSTS } from '../_mocks/fakePosts';
-import PostCard from '../components/PostCard'; // 1. 우리가 만든 PostCard 컴포넌트를 import 합니다.
+import { FAKE_POSTS } from '@/mocks/mockPosts.js';
+import PostCard from '@/components/PostCard';
 
 export default function SocialFeed() {
   const posts = FAKE_POSTS;

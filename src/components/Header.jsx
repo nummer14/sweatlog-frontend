@@ -32,7 +32,10 @@ function Header() {
   return (
     <header>
       <nav>
-        <Link to="/" className="flex items-end text-2xl font-bold text-blue-600">
+        <Link
+          to="/"
+          className="flex items-end text-2xl font-bold text-blue-600"
+        >
           {/* 1. 'Sweatlo' 부분은 그대로 보여줍니다. */}
           <span>sweatlo</span>
 
@@ -54,6 +57,9 @@ function Header() {
           </Link>
           <Link to="/post" className="text-gray-600 hover:text-blue-500">
             운동 기록
+          </Link>
+          <Link to="/routines" className="text-gray-600 hover:text-blue-500">
+            나의 루틴
           </Link>
 
           {isLoggedIn ? (

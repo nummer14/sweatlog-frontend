@@ -8,7 +8,7 @@ export default function LandingPage() {
         당신의 모든 땀방울을 기록하세요
       </h1>
       <p className="mt-6 text-lg leading-8 text-gray-600">
-        Sweatlog는 당신의 운동 여정을 함께합니다. <br />
+        sweatlog는 당신의 운동 여정을 함께합니다. <br />
         체계적으로 기록하고, 친구들과 공유하며 동기를 부여받으세요.
       </p>
       <div className="mt-10 flex items-center justify-center gap-x-6">

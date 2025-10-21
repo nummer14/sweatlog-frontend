@@ -36,7 +36,7 @@ export const FAKE_POSTS = [
     },
     content: "한강까지 10km 러닝 완료! 날씨 최고!",
     imageUrl:
-      "https://images.unsplash.com/photo-1587370392289-bfab420a884a?w=500",
+      "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=500",
     likes: 32,
     commentCount: 7,
     createdAt: "2025-10-17T18:15:00Z",

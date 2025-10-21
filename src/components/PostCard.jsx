@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { Link } from "react-router-dom";
 
 // 댓글 데이터를 위한 가짜 데이터 (나중에는 API로 받아옵니다)
 const FAKE_COMMENTS = [
@@ -9,11 +10,10 @@ const FAKE_COMMENTS = [
 export default function PostCard({ post }) {
   const [isLiked, setIsLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(post.likes);
-
-  // --- 여기에 새로운 상태를 추가합니다 ---
   const [commentsVisible, setCommentsVisible] = useState(false);
 
   if (!post) return null;
+
   // 3. '좋아요' 버튼을 클릭했을 때 실행될 함수
   const handleLikeClick = () => {
     // isLiked 상태를 현재와 반대로 뒤집습니다 (true -> false, false -> true)
@@ -25,6 +25,8 @@ export default function PostCard({ post }) {
     // TODO: 나중에 여기에 실제 백엔드 API (axios.post)를 호출하는 코드를 추가합니다.
   };
 
+  console.log("PostCard가 받은 데이터:", post);
+
   return (
     <div className="overflow-hidden rounded-lg bg-white shadow">
       {/* --- 게시물 헤더 --- */}
@@ -34,15 +36,27 @@ export default function PostCard({ post }) {
           alt={post.author.nickname}
           className="h-10 w-10 rounded-full object-cover"
         />
-        <span className="ml-3 font-semibold">{post.author.nickname}</span>
+        <Link
+          to={`/profile/${post.author.id}`}
+          className="ml-3 font-semibold hover:underline"
+        >
+          {post.author.nickname}
+        </Link>
       </div>
 
       {/* --- 게시물 이미지 --- */}
       {post.imageUrl && (
-        <img src={post.imageUrl} alt="Post content" className="h-auto w-full" />
+        <Link to={`/post/${post.id}`}>
+          <div className="w-full">
+            <img
+              src={post.imageUrl}
+              alt={`Post by ${post.author.nickname}`}
+              className="h-auto w-full object-cover"
+            />
+          </div>
+        </Link>
       )}
 
-      {/* --- 게시물 액션 버튼 --- */}
       {/* --- 게시물 액션 버튼 --- */}
       <div className="flex gap-4 border-t border-gray-200 p-2">
         {/* '좋아요' 버튼: onClick에 handleLikeClick을 연결 */}
