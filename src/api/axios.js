@@ -1,9 +1,12 @@
+// 수정해야 할 코드 (예: src/api/axios.js)
 import axios from 'axios';
-// 1. useAuthStore 훅 대신, 스토어의 원본 자체를 가져옵니다.
 import useAuthStore from '../store/authStore'; 
 
 const api = axios.create({
-  baseURL: 'http://localhost:8080', // 백엔드 서버 주소
+  // baseURL을 '/api'로 변경합니다.
+  // 이렇게 하면 api.get('/posts') 호출 시 -> '/api/posts'로 요청이 나가고,
+  // Vite 프록시가 이 요청을 http://localhost:8080/api/posts 로 전달해줍니다.
+  baseURL: '/api', 
 });
 
 // 요청 인터셉터 (API 요청을 보내기 직전에 가로채는 로직)

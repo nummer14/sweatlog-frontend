@@ -1,131 +1,194 @@
 import React, { useState, useEffect } from "react";
 import useAuthStore from "@/store/authStore";
 import Modal from "@/components/Modal";
-import { FAKE_POSTS } from "@/mocks/mockPosts.js";
 import GoalSettingModal from "@/components/GoalSettingModal";
+import api from "@/api/axios"; // 👈 1. 우리가 만든 axios 인스턴스를 import 합니다.
 
 export default function MyProfile() {
-  const { user, login } = useAuthStore(); // login 액션도 가져옵니다 (상태 업데이트용).
-  const [myPosts, setMyPosts] = useState([]);
+  const { user: authUser, login } = useAuthStore(); // 스토어의 user는 authUser로 별칭을 붙여 사용
+
+  // 👈 2. API로부터 받아올 데이터를 위한 상태들을 새로 정의합니다.
+  const [profile, setProfile] = useState(null); // 전체 프로필 정보
+  const [myPosts, setMyPosts] = useState([]); // 내 게시물 목록
+  const [goals, setGoals] = useState([]); // 내 목표 목록
+  const [loading, setLoading] = useState(true); // 로딩 상태
+  const [error, setError] = useState(null); // 에러 상태
+
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isGoalModalOpen, setIsGoalModalOpen] = useState(false);
   const [profileFormData, setProfileFormData] = useState({
     nickname: "",
     bio: "",
-    // 나중에 추가할 필드들...
     height: "",
     weight: "",
   });
 
-  const [goals, setGoals] = useState([]); // 목표 목록을 저장할 배열
-  const [isGoalModalOpen, setIsGoalModalOpen] = useState(false); // 목표 설정 모달의 열림/닫힘 상태
-
-  // 컴포넌트가 로드되거나, user 정보가 바뀔 때 실행됩니다.
+  // 👈 3. 컴포넌트가 마운트될 때 백엔드에서 모든 데이터를 가져오는 useEffect
   useEffect(() => {
-    if (user) {
-      // 내 게시물 필터링
-      const filteredPosts = FAKE_POSTS.filter(
-        (post) => post.author.id === user.id
-      );
-      setMyPosts(filteredPosts);
-
-      // 4. 수정 폼의 초기값을 현재 사용자 정보로 설정합니다.
-      setProfileFormData({
-        nickname: user.nickname,
-        bio: "꾸준함이 답이다. 3대 500을 향하여!", // (bio는 아직 user 객체에 없으므로 임시 데이터 사용)
-        height: user.height || "",
-        weight: user.weight || "",
-      });
+    // 로그인된 사용자가 없으면 아무것도 하지 않음
+    if (!authUser?.id) {
+      setLoading(false);
+      return;
     }
-  }, [user]);
 
-  // --- 5. 프로필 수정 폼의 내용이 바뀔 때 실행될 핸들러 함수 ---
+    const fetchMyProfileData = async () => {
+      try {
+        setLoading(true);
+        // 여러 API를 동시에 요청하여 페이지 로딩 속도를 높입니다.
+        const [profileRes, postsRes, goalsRes] = await Promise.all([
+          api.get("/api/users/me"), // ✅ GET /api/users/me (내 정보 조회)
+          api.get(`/api/posts/user/${authUser.id}`), // ✅ GET /api/posts/user/{userId} (내 게시물 조회)
+          api.get("/api/users/profile/goals"), // ✅ GET /api/users/profile/goals (내 목표 조회)
+        ]);
+
+        // 각 API 응답 데이터를 상태에 저장
+        setProfile(profileRes.data);
+        setMyPosts(postsRes.data);
+        setGoals(goalsRes.data);
+
+        // 프로필 수정 폼의 초기값을 서버에서 받은 데이터로 설정
+        setProfileFormData({
+          nickname: profileRes.data.nickname || "",
+          bio: profileRes.data.bio || "자기소개를 입력해주세요.",
+          height: profileRes.data.height || "",
+          weight: profileRes.data.weight || "",
+        });
+      } catch (err) {
+        console.error("프로필 데이터를 불러오는 데 실패했습니다:", err);
+        setError("데이터를 불러올 수 없습니다. 잠시 후 다시 시도해주세요.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchMyProfileData();
+  }, [authUser]); // authUser 정보가 변경될 때마다 다시 데이터를 가져옵니다.
+
   const handleFormChange = (e) => {
     const { name, value } = e.target;
     setProfileFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  // --- 6. 프로필 수정 폼을 '저장'할 때 실행될 핸들러 함수 ---
-  const handleFormSubmit = (e) => {
+  // 👈 4. 프로필 수정 폼을 실제 API와 연동
+  const handleFormSubmit = async (e) => {
     e.preventDefault();
+    try {
+      // ✅ PUT /api/users/profile/setting (프로필 설정/수정)
+      const response = await api.put(
+        "/api/users/profile/setting",
+        profileFormData
+      );
 
-    // TODO: 나중에 여기에 실제 백엔드 API (api.patch('/api/user/profile')) 호출 코드를 추가합니다.
+      // 서버로부터 업데이트된 최신 프로필 정보를 받아와 화면에 반영
+      setProfile(response.data);
 
-    // 지금은 프론트엔드의 상태만 먼저 업데이트해서 UI에 즉시 반영합니다. (Optimistic Update)
-    const updatedUser = {
-      ...user,
-      nickname: profileFormData.nickname,
-      height: profileFormData.height,
-      weight: profileFormData.weight,
-    };
-    // (bio 정보도 user 객체에 있다면 함께 업데이트)
+      // Zustand 스토어의 닉네임도 업데이트 (Header 등 다른 컴포넌트에 반영하기 위함)
+      login(
+        { ...authUser, nickname: response.data.nickname },
+        useAuthStore.getState().accessToken
+      );
 
-    login(updatedUser, useAuthStore.getState().accessToken); // Zustand 스토어 업데이트
-
-    console.log("수정된 프로필 데이터:", profileFormData);
-    alert("프로필이 성공적으로 수정되었습니다.");
-
-    setIsModalOpen(false); // 모달을 닫습니다.
+      alert("프로필이 성공적으로 수정되었습니다.");
+      setIsModalOpen(false);
+    } catch (err) {
+      console.error("프로필 수정 실패:", err);
+      alert("프로필 수정에 실패했습니다.");
+    }
   };
-  // --- 3. GoalSettingModal에서 '목표 추가' 버튼을 눌렀을 때 실행될 함수 ---
-  const handleAddGoal = (newGoal) => {
-    setGoals((prevGoals) => [...prevGoals, newGoal]);
-    // TODO: 나중에 여기에 실제 백엔드 API (api.post('/api/goals')) 호출 코드를 추가합니다.
+
+  // 👈 5. 목표 추가 기능을 실제 API와 연동
+  const handleAddGoal = async (newGoalData) => {
+    try {
+      // ✅ POST /api/users/profile/goals (내 목표 생성)
+      const response = await api.post("/api/users/profile/goals", newGoalData);
+
+      // 서버로부터 생성된 목표 데이터를 받아와 상태에 추가하여 화면에 즉시 반영
+      setGoals((prevGoals) => [...prevGoals, response.data]);
+
+      alert("새로운 목표가 추가되었습니다!");
+      setIsGoalModalOpen(false);
+    } catch (err) {
+      console.error("목표 추가 실패:", err);
+      alert("목표 추가에 실패했습니다.");
+    }
   };
 
-  if (!user) {
+  // --- 로딩 및 에러 상태에 따른 UI 처리 ---
+  if (loading) {
+    return <div className="p-8 text-center">프로필 정보를 불러오는 중...</div>;
+  }
+
+  if (error) {
+    return <div className="p-8 text-center text-red-500">{error}</div>;
+  }
+
+  if (!authUser || !profile) {
     return <div className="p-8 text-center">로그인 후 이용해주세요.</div>;
   }
 
-  const profileData = {
-    avatarUrl: `https://i.pravatar.cc/150?u=${user.id}`,
-    nickname: user.nickname, // 이제 Zustand 스토어의 최신 닉네임을 보여줍니다.
-    postCount: myPosts.length,
-    followerCount: 120,
-    followingCount: 85,
-    bio: profileFormData.bio, // (임시) 폼 상태의 bio를 보여줍니다.
+  // 👇 프로필 이미지 업로드 성공 시 호출될 함수를 새로 만듭니다.
+  const handleProfileImageUpload = async (imageUrl) => {
+    try {
+      // 1. 이미지는 ImageUploader가 S3에 업로드 완료.
+      // 2. 우리는 그 결과로 받은 imageUrl을 우리 DB의 유저 정보에 업데이트 해달라고 요청.
+      //    이것을 위한 별도의 API가 필요합니다. (예: PUT /api/users/profile/image)
+      await api.put("/api/users/profile/image", { imageUrl }); // 백엔드와 이 API에 대해 협의 필요
+
+      // 상태를 업데이트하여 화면에 즉시 반영
+      setProfile((prev) => ({ ...prev, avatarUrl: imageUrl }));
+      alert("프로필 이미지가 변경되었습니다.");
+    } catch (err) {
+      console.error("프로필 이미지 업데이트 실패:", err);
+      alert("프로필 이미지 변경에 실패했습니다.");
+    }
   };
 
+  // 👈 6. 모든 JSX 부분을 가짜 데이터가 아닌, 서버에서 받아온 'profile' 상태와 연결
   return (
     <div className="container mx-auto max-w-2xl p-4">
       {/* --- 프로필 헤더 --- */}
       <div className="flex items-center p-4">
         <img
-          src={profileData.avatarUrl}
+          src={profile.avatarUrl || `https://i.pravatar.cc/150?u=${profile.id}`}
           alt="프로필 사진"
           className="h-20 w-20 rounded-full object-cover md:h-32 md:w-32"
         />
         <div className="ml-6 flex-grow">
           <div className="flex items-center gap-4">
-            <h2 className="text-2xl font-bold">{profileData.nickname}</h2>
-            {/* --- 7. '프로필 수정' 버튼을 추가하고, 클릭 시 모달을 열도록 합니다. --- */}
+            <h2 className="text-2xl font-bold">{profile.nickname}</h2>
             <button
               onClick={() => setIsModalOpen(true)}
-              className="rounded-md border bg-gray-100 px-3 py-1 text-sm font-semibold text-gray-700 hover:bg-gray-200"
+              className="rounded-md border bg-gray-100 px-3 py-1 text-sm font-semibold"
             >
               프로필 수정
             </button>
           </div>
           <div className="mt-4 flex space-x-4 text-center">
             <div>
-              <span className="font-bold">{profileData.postCount}</span>
+              <span className="font-bold">{myPosts.length}</span>
               <p className="text-sm text-gray-500">게시물</p>
             </div>
             <div>
-              <span className="font-bold">{profileData.followerCount}</span>
+              <span className="font-bold">{profile.followerCount || 0}</span>
               <p className="text-sm text-gray-500">팔로워</p>
             </div>
             <div>
-              <span className="font-bold">{profileData.followingCount}</span>
-              <p className="text-sm text-gray-500">팔로잉</p>
+              <span className="font-bold">{profile.followingCount || 0}</span>
+              <p className="text-gray-500">팔로잉</p>
             </div>
           </div>
-          {user.height && user.weight && (
-            <div className="mt-4 flex space-x-4 text-sm text-gray-600">
-              <span>키: {user.height}cm</span>
-              <span>몸무게: {user.weight}kg</span>
+          {profile.height && profile.weight && (
+            <div className="mt-4 flex space-x-4 text-sm">
+              <span>키: {profile.height}cm</span>
+              <span>몸무게: {profile.weight}kg</span>
             </div>
           )}
         </div>
+      </div>
+
+      {/* --- 자기소개 --- */}
+      <div className="p-4">
+        <p>{profile.bio}</p>
       </div>
 
       {/* --- 자기소개 --- */}
@@ -194,6 +257,18 @@ export default function MyProfile() {
       <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)}>
         <form onSubmit={handleFormSubmit} className="space-y-4">
           <h2 className="text-xl font-bold">프로필 수정</h2>
+          <div>
+            <label className="block text-sm font-medium text-gray-700">
+              프로필 사진
+            </label>
+            <div className="mt-1">
+              <ImageUploader
+                onUploadSuccess={handleProfileImageUpload}
+                uploadContext="profile"
+              />
+            </div>
+          </div>
+
           <div>
             <label
               htmlFor="nickname"

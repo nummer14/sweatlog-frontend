@@ -1,23 +1,7 @@
 import React from "react";
 import { Link, useNavigate } from "react-router-dom";
 import useAuthStore from "../store/authStore";
-
-// 1. 아령 'g' 아이콘을 별도의 React 컴포넌트로 정의합니다.
-//    이렇게 하면 코드가 깔끔해지고, 다른 곳에서도 재사용할 수 있습니다.
-// 아령 'g' 아이콘 컴포넌트
-const DumbbellGIcon = () => (
-  // SVG 크기를 100%로 설정하여 부모 span의 크기를 따르게 합니다.
-  <svg
-    className="h-full w-full rotate-90"
-    viewBox="0 0 100 100"
-    fill="currentColor"
-    aria-hidden="true"
-  >
-    <rect x="20" y="45" width="60" height="10" rx="5" />
-    <rect x="10" y="30" width="20" height="40" rx="8" />
-    <rect x="70" y="30" width="20" height="40" rx="8" />
-  </svg>
-);
+import Logo from "./Logo";
 
 function Header() {
   const { isLoggedIn, user, logout } = useAuthStore();
@@ -30,25 +14,11 @@ function Header() {
   };
 
   return (
-    <header>
-      <nav>
-        <Link
-          to="/"
-          className="flex items-end text-2xl font-bold text-blue-600"
-        >
-          {/* 1. 'Sweatlo' 부분은 그대로 보여줍니다. */}
-          <span>sweatlo</span>
-
-          {/* 2. 'g' 글자를 위한 자리를 만들고, 그 위에 아이콘을 겹칩니다. */}
-          <span className="relative">
-            {/* 3. 실제 'g' 글자는 투명하게 만들어 보이지 않게 합니다. */}
-            <span className="text-transparent">g</span>
-
-            {/* 4. 아령 아이콘을 'absolute'로 띄워서 'g'의 위치에 정확히 겹칩니다. */}
-            <span className="absolute -left-[0.3em] -top-[0.4em] h-[2.9em] w-[1.3em]">
-              <DumbbellGIcon />
-            </span>
-          </span>
+    <header className="bg-white shadow-sm">
+      <nav className="container mx-auto flex items-center justify-between p-4">
+        {/* 👇 로고 부분은 이 <Link> 태그 하나로 완벽하게 정리됩니다. */}
+        <Link to="/">
+          <Logo size="4xl" />
         </Link>
 
         <div className="flex items-center space-x-4">
@@ -64,15 +34,17 @@ function Header() {
 
           {isLoggedIn ? (
             <>
-              <Link to="/profile" className="text-gray-600 hover:text-blue-500">
-                내 프로필
+              <Link to="/profile" className="flex items-center gap-2 text-gray-600 hover:text-blue-500">
+                <img 
+                  src={user?.avatarUrl || `https://i.pravatar.cc/150?u=${user?.id}`} 
+                  alt="My Profile" 
+                  className="h-8 w-8 rounded-full object-cover"
+                />
+                <span>내 프로필</span>
               </Link>
-              <span className="font-semibold">
-                {user?.nickname}님, 환영합니다!
-              </span>
               <button
                 onClick={handleLogout}
-                className="rounded bg-red-500 px-4 py-2 text-white hover:bg-red-600"
+                className="rounded bg-gray-200 px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-300"
               >
                 로그아웃
               </button>
@@ -81,11 +53,11 @@ function Header() {
             <>
               <Link
                 to="/login"
-                className="rounded bg-blue-500 px-4 py-2 text-white hover:bg-blue-600"
+                className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700"
               >
                 로그인
               </Link>
-              <Link to="/signup" className="text-gray-600 hover:text-blue-500">
+              <Link to="/signup" className="text-sm font-semibold text-gray-700 hover:text-gray-900">
                 회원가입
               </Link>
             </>

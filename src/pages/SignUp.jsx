@@ -1,40 +1,41 @@
-import React, { useState } from 'react';
-import axios from 'axios';
+import React, { useState } from "react";
+import { useNavigate, Link } from "react-router-dom";
+import api from "@/api/axios";
+import Logo from "@/components/Logo";
 
 export default function SignUp() {
-  // 2. 폼 데이터를 '기억'할 상태 변수를 만듭니다.
+  const navigate = useNavigate();
+
+  // 👇 DTO가 요구하는 username, email, password, fullName 상태를 준비합니다.
   const [formData, setFormData] = useState({
-    email: '',
-    password: '',
-    nickname: '',
-    birthdate: '',
+    fullName: "",
+    email: "",
+    username: "",
+    password: "",
   });
 
-  // 3. input 값이 바뀔 때마다 실행될 함수입니다.
   const handleChange = (event) => {
-    const { name, value } = event.target; // 변경된 input의 name과 value를 가져옵니다.
+    const { name, value } = event.target;
     setFormData((prevData) => ({
-      ...prevData, // 이전 데이터는 그대로 두고,
-      [name]: value, // 변경된 부분만 새로 덮어씁니다.
+      ...prevData,
+      [name]: value,
     }));
   };
 
-  const handleSubmit = async (event) => { // async 추가
+  const handleSubmit = async (event) => {
     event.preventDefault();
-
     try {
-      // 3. 백엔드 서버의 회원가입 API 엔드포인트로 POST 요청을 보냅니다.
-      // 지금은 백엔드가 없으니 주소는 예시입니다.
-      const response = await axios.post('/api/users/signup', formData);
-
-      console.log('서버 응답:', response.data);
-      alert('회원가입 성공!');
-      // TODO: 회원가입 성공 후 로그인 페이지로 이동시키기
-
+      // formData에는 이제 백엔드가 원하는 모든 정보가 정확히 담겨 있습니다.
+      await api.post("/auth/register", formData);
+      alert("회원가입이 완료되었습니다! 로그인 페이지로 이동합니다.");
+      navigate("/login");
     } catch (error) {
-      // 4. 요청이 실패했을 때 에러를 처리합니다.
-      console.error('회원가입 에러:', error);
-      alert('회원가입에 실패했습니다. 콘솔을 확인해주세요.');
+      console.error("회원가입 에러:", error);
+      if (error.response) {
+        alert(error.response.data.message || "회원가입에 실패했습니다.");
+      } else {
+        alert("회원가입 중 오류가 발생했습니다. 네트워크 연결을 확인해주세요.");
+      }
     }
   };
 
@@ -42,62 +43,56 @@ export default function SignUp() {
     <div className="flex min-h-screen items-center justify-center bg-gray-50">
       <div className="w-full max-w-md space-y-8 rounded-lg bg-white p-10 shadow-lg">
         <div>
-          <h2 className="text-center text-3xl font-extrabold text-gray-900">
-            Sweatlog 회원가입
-          </h2>
+          <Logo size="5xl" />
         </div>
 
-        {/* 5. handleSubmit 함수를 form에 연결합니다. */}
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           <div className="space-y-4 rounded-md shadow-sm">
-            {/* 이메일 입력 */}
+            {/* 1. 이름 (Full Name) */}
             <div>
               <input
-                name="email" // 6. 각 input에 name 속성을 부여합니다.
-                type="email"
+                name="fullName"
+                type="text"
                 required
-                className="..." // className은 이전과 동일하므로 생략합니다.
-                placeholder="이메일 주소"
-                value={formData.email} // 7. 화면에 보여줄 값을 상태와 연결합니다.
-                onChange={handleChange} // 8. 값이 바뀔 때마다 handleChange 함수를 실행합니다.
+                className="relative block w-full appearance-none rounded-md border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-500 focus:z-10 focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
+                placeholder="이름"
+                value={formData.fullName}
+                onChange={handleChange}
               />
             </div>
-
-            {/* 비밀번호 입력 */}
+            {/* 2. 이메일 주소 */}
+            <div>
+              <input
+                name="email"
+                type="email"
+                required
+                className="relative block w-full appearance-none rounded-md border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-500 focus:z-10 focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
+                placeholder="이메일 주소"
+                value={formData.email}
+                onChange={handleChange}
+              />
+            </div>
+            {/* 3. 비밀번호 */}
             <div>
               <input
                 name="password"
                 type="password"
                 required
-                className="..."
-                placeholder="비밀번호"
+                className="relative block w-full appearance-none rounded-md border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-500 focus:z-10 focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
+                placeholder="비밀번호 (6자 이상)"
                 value={formData.password}
                 onChange={handleChange}
               />
             </div>
-
-            {/* 닉네임 입력 */}
+            {/* 4. 사용자 아이디 (Username) */}
             <div>
               <input
-                name="nickname"
+                name="username"
                 type="text"
                 required
-                className="..."
-                placeholder="닉네임"
-                value={formData.nickname}
-                onChange={handleChange}
-              />
-            </div>
-
-            {/* 생년월일 입력 */}
-            <div>
-              <input
-                name="birthdate"
-                type="date"
-                required
-                className="..."
-                placeholder="생년월일"
-                value={formData.birthdate}
+                className="relative block w-full appearance-none rounded-md border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-500 focus:z-10 focus:border-blue-500 focus:outline-none focus:ring-blue-500 sm:text-sm"
+                placeholder="닉네임 (3자에서 30자 사이)"
+                value={formData.username}
                 onChange={handleChange}
               />
             </div>
@@ -112,6 +107,15 @@ export default function SignUp() {
             </button>
           </div>
         </form>
+
+        <div className="text-sm text-center">
+          <Link
+            to="/login"
+            className="font-medium text-blue-600 hover:text-blue-500"
+          >
+            이미 계정이 있으신가요? 로그인
+          </Link>
+        </div>
       </div>
     </div>
   );

@@ -1,38 +1,67 @@
 import React, { useState, useEffect } from "react";
 import api from "../api/axios";
+import useAuthStore from "../store/authStore";
 
-// 이 컴포넌트는 두 개의 props를 받습니다:
+// 이 컴포넌트는 단 하나의 props만 받습니다:
 // - targetUserId: 팔로우할 대상의 ID
-// - initialIsFollowing: 이 페이지를 로드했을 때 내가 이미 상대를 팔로우하고 있었는지 여부
-export default function FollowButton({ targetUserId, initialIsFollowing }) {
-  const [isFollowing, setIsFollowing] = useState(initialIsFollowing);
-  const [isLoading, setIsLoading] = useState(false);
+export default function FollowButton({ targetUserId }) {
+  const { user: me } = useAuthStore(); // 현재 로그인한 내 정보
 
-  // 부모 컴포넌트에서 전달된 initialIsFollowing 값이 바뀔 때,
-  // 이 컴포넌트의 상태도 동기화해줍니다.
+  const [isFollowing, setIsFollowing] = useState(false); // 초기값은 항상 false
+  const [isLoading, setIsLoading] = useState(true); // 👈 2. 초기 로딩 상태 추가
+
+  // 👈 3. 컴포넌트가 처음 렌더링될 때, 실제 팔로우 상태를 서버에서 조회합니다.
   useEffect(() => {
-    setIsFollowing(initialIsFollowing);
-  }, [initialIsFollowing]);
+    // 팔로우 대상이 없거나, 내 자신일 경우에는 아무것도 하지 않음
+    if (!targetUserId || me?.id === targetUserId) {
+      setIsLoading(false);
+      return;
+    }
+
+    const fetchFollowStatus = async () => {
+      try {
+        setIsLoading(true);
+        // ✅ GET /api/users/{userId}/follow-status (팔로우 상태 조회)
+        const response = await api.get(
+          `/api/users/${targetUserId}/follow-status`
+        );
+        // 서버로부터 받은 실제 팔로우 상태(true/false)로 상태를 업데이트합니다.
+        setIsFollowing(response.data.isFollowing);
+      } catch (error) {
+        console.error("팔로우 상태 조회 중 에러 발생:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchFollowStatus();
+  }, [targetUserId, me]); // targetUserId가 바뀔 때마다 다시 조회합니다.
 
   const handleFollowClick = async () => {
-    setIsLoading(true); // 로딩 시작
+    setIsLoading(true);
     try {
-      // 백엔드의 팔로우 API('/api/follow/{userId}')를 호출합니다.
-      await api.post(`/api/follow/${targetUserId}`);
+      // ✅ POST /api/users/{userId}/follow (팔로우/언팔로우 토글)
+      // 백엔드 컨트롤러에서 확인한 실제 엔드포인트로 수정합니다.
+      await api.post(`/api/users/${targetUserId}/follow`);
 
-      // API 호출 성공 시, 버튼의 상태를 즉시 반대로 변경합니다. (Optimistic Update)
-      setIsFollowing(!isFollowing);
+      // API 호출 성공 시, 버튼의 상태를 즉시 반대로 변경합니다.
+      setIsFollowing((prev) => !prev);
     } catch (error) {
       console.error("팔로우/언팔로우 처리 중 에러 발생:", error);
       alert("요청을 처리하는 중 문제가 발생했습니다.");
     } finally {
-      setIsLoading(false); // 로딩 종료
+      setIsLoading(false);
     }
   };
 
+  // 👈 4. 내 프로필에서는 팔로우 버튼이 보이지 않도록 처리
+  if (me?.id === targetUserId) {
+    return null; // 아무것도 렌더링하지 않음
+  }
+
   const buttonStyle = isFollowing
-    ? "bg-gray-200 text-gray-800 hover:bg-gray-300" // 팔로잉 중일 때 스타일
-    : "bg-blue-500 text-white hover:bg-blue-600"; // 팔로우 안 할 때 스타일
+    ? "bg-gray-200 text-gray-800 hover:bg-gray-300"
+    : "bg-blue-500 text-white hover:bg-blue-600";
 
   return (
     <button
@@ -40,7 +69,7 @@ export default function FollowButton({ targetUserId, initialIsFollowing }) {
       disabled={isLoading}
       className={`rounded-md px-4 py-2 text-sm font-semibold transition-colors ${buttonStyle}`}
     >
-      {isLoading ? "처리 중..." : isFollowing ? "팔로잉" : "팔로우"}
+      {isLoading ? "확인 중..." : isFollowing ? "팔로잉" : "팔로우"}
     </button>
   );
 }

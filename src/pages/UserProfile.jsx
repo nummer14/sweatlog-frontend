@@ -16,9 +16,10 @@ export default function UserProfile() {
   useEffect(() => {
     const fetchUserProfile = async () => {
       setIsLoading(true);
+      setError(null); // 에러 상태 초기화
       try {
-        // 백엔드에 특정 사용자의 프로필 정보를 요청합니다. (API 주소는 백엔드와 확인 필요)
-        const response = await api.get(`/api/user/profile/${userId}`);
+        // 👇 이 부분의 경로를 가장 표준적인 형태로 수정합니다.
+        const response = await api.get(`/api/users/${userId}`);
         setProfileData(response.data);
       } catch (err) {
         setError("프로필을 불러올 수 없습니다.");
@@ -57,8 +58,7 @@ export default function UserProfile() {
             <h2 className="text-2xl font-bold">{profileData.nickname}</h2>
             {/* 여기에 FollowButton을 사용합니다! */}
             <FollowButton
-              targetUserId={profileData.id}
-              initialIsFollowing={profileData.isFollowing} // 백엔드가 이 정보를 준다고 가정
+              targetUserId={profileData.id} // 👈 targetUserId만 넘겨주면 알아서 작동합니다.
             />
           </div>
           <div className="mt-4 flex space-x-4 text-center">

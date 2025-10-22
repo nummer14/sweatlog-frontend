@@ -1,13 +1,61 @@
-import React, { useState } from "react";
-import { Link } from "react-router-dom"; // 페이지 이동을 위한 Link
+import React, { useState, useEffect } from "react"; // 👈 1. useState, useEffect import
+import { Link, useNavigate } from "react-router-dom"; // 👈 2. useNavigate import (수정/삭제 후 이동용)
+import api from "../api/axios"; // 👈 3. api 인스턴스 import
 
 export default function MyRoutines() {
-  // 지금은 가짜 데이터로 루틴 목록을 만듭니다.
-  // 나중에 백엔드에서 실제 데이터를 받아오도록 수정할 겁니다.
+  const navigate = useNavigate();
+
   const [routines, setRoutines] = useState([
     { id: 1, name: "3분할 가슴/삼두 운동", exerciseCount: 5 },
     { id: 2, name: "하체 집중의 날", exerciseCount: 4 },
   ]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // 👈 5. 페이지 로드 시 내 루틴 목록을 불러오는 useEffect
+  useEffect(() => {
+    const fetchRoutines = async () => {
+      try {
+        setLoading(true);
+        // ✅ GET /api/routine (내 전체 루틴 조회) - 우리가 유추한 엔드포인트
+        const response = await api.get("/api/routine");
+        setRoutines(response.data);
+      } catch (err) {
+        console.error("루틴 목록을 불러오는 데 실패했습니다:", err);
+        setError("루틴 목록을 불러올 수 없습니다.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchRoutines();
+  }, []); // 처음 렌더링될 때 한 번만 실행
+
+  // 👈 6. 루틴 삭제 핸들러 함수 추가
+  const handleRoutineDelete = async (routineId) => {
+    if (!window.confirm("정말로 이 루틴을 삭제하시겠습니까?")) {
+      return;
+    }
+    try {
+      // ✅ DELETE /api/routine/{routineId} (루틴 삭제)
+      await api.delete(`/api/routine/${routineId}`);
+
+      // 성공 시, 화면(상태)에서도 해당 루틴을 즉시 제거
+      setRoutines((prevRoutines) => prevRoutines.filter((r) => r.id !== routineId));
+      alert("루틴이 삭제되었습니다.");
+    } catch (err) {
+      console.error("루틴 삭제 실패:", err);
+      alert("루틴 삭제에 실패했습니다.");
+    }
+  };
+  
+  // 👈 7. 로딩 및 에러 상태 UI 처리
+  if (loading) {
+    return <div className="p-8 text-center">루틴 목록을 불러오는 중...</div>;
+  }
+  if (error) {
+    return <div className="p-8 text-center text-red-500">{error}</div>;
+  }
 
   return (
     <div className="container mx-auto max-w-2xl p-4">
@@ -26,18 +74,29 @@ export default function MyRoutines() {
         {routines.length > 0 ? (
           routines.map((routine) => (
             <div
-              key={routine.id}
+              key={routine.id} // 백엔드 응답의 고유 ID가 'id'라고 가정
               className="flex items-center justify-between rounded-lg bg-white p-4 shadow"
             >
               <div>
-                <p className="font-semibold">{routine.name}</p>
+                <p className="font-semibold">{routine.routineName}</p> {/* 백엔드 응답 key가 'routineName'이라고 가정 */}
                 <p className="text-sm text-gray-500">
-                  {routine.exerciseCount}개의 운동
+                  {routine.exerciseCount || routine.details?.length || 0}개의 운동
                 </p>
               </div>
-              <div>
-                {/* TODO: 나중에 수정/삭제 버튼을 여기에 추가합니다. */}
-                <button className="text-sm text-gray-400">수정</button>
+              {/* 👈 8. 수정/삭제 버튼 기능 연결 */}
+              <div className="flex gap-4">
+                <button 
+                  onClick={() => navigate(`/routines/edit/${routine.id}`)} // 수정 페이지로 이동
+                  className="text-sm font-semibold text-blue-600 hover:text-blue-500"
+                >
+                  수정
+                </button>
+                <button 
+                  onClick={() => handleRoutineDelete(routine.id)}
+                  className="text-sm font-semibold text-red-600 hover:text-red-500"
+                >
+                  삭제
+                </button>
               </div>
             </div>
           ))

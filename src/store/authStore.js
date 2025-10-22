@@ -10,19 +10,23 @@ const useAuthStore = create(
       // --- 상태 (State) ---
       isLoggedIn: false,    // 로그인 여부
       user: null,           // 로그인한 사용자 정보 (예: { nickname: '운동고수' })
-      token: null,          // 서버로부터 받은 인증 토큰 (JWT)
+      
+      // 'token'을 'accessToken'으로 변경하여 axios 인터셉터와 통일합니다.
+      accessToken: null,    // 서버로부터 받은 인증 토큰 (JWT)
 
       // --- 상태를 변경하는 함수 (Actions) ---
-      login: (userData, authToken) => set({
+      
+      // 파라미터 이름도 명확하게 authToken -> token 으로 변경하는 것이 좋습니다.
+      login: (userData, token) => set({
         isLoggedIn: true,
         user: userData,
-        token: authToken,
+        accessToken: token, // 저장할 때도 accessToken으로 저장합니다.
       }),
 
       logout: () => set({
         isLoggedIn: false,
         user: null,
-        token: null,
+        accessToken: null, // 초기화할 때도 accessToken을 null로 만듭니다.
       }),
     }),
     {

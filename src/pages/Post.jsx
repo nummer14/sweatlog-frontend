@@ -25,6 +25,7 @@ export default function Post() {
     startTime: "09:00",
     endTime: "10:00",
     workoutType: "웨이트 트레이닝",
+    location: "",
     workouts: [createNewWorkout()],
     cardios: [createNewCardio()], // 유산소 데이터 상태 추가
     memo: "",
@@ -32,6 +33,9 @@ export default function Post() {
 
   // 업로드된 이미지 URL을 저장할 새로운 상태를 추가합니다.
   const [imageUrl, setImageUrl] = useState("");
+
+  // 👈 1. API 요청 중복 제출을 막기 위한 로딩 상태 추가
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // --- 핸들러 함수들 ---
 
@@ -93,26 +97,45 @@ export default function Post() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    // 최종적으로 백엔드에 보낼 데이터를 조합합니다.
-    const finalData = {
-      ...postData,
-      img: imageUrl, // 'img' 라는 키로 이미지 URL을 추가합니다.
-    };
+    // 👈 2. 로딩 상태를 확인하여 중복 제출 방지
+    if (isSubmitting) return;
+    setIsSubmitting(true);
 
-    // 불필요한 데이터는 정리해줍니다. (백엔드와 협의 필요)
-    delete finalData.cardios; // 예시: 웨이트 기록 시 유산소 데이터는 비움
+    // 👈 3. 백엔드의 PostRequest.java DTO 형식에 맞게 데이터를 재구성합니다.
+    const finalData = {
+      date: postData.date,
+      startTime: postData.startTime,
+      endTime: postData.endTime,
+      memo: postData.memo,
+      imageUrl: imageUrl,
+      category: postData.workoutType, 
+      postDetails: postData.workouts.map(workout => ({
+        workoutName: workout.name,
+        sets: workout.sets.map((set) => ({
+          weight: parseFloat(set.weight) || 0, // 숫자로 변환
+          reps: parseInt(set.reps, 10) || 0, // 숫자로 변환
+        })),
+      })),
+      // cardio 데이터 등 다른 데이터도 백엔드 DTO에 따라 추가할 수 있습니다.
+    };
 
     try {
       console.log("백엔드로 전송될 데이터:", finalData);
 
-      // 실제 백엔드 API로 데이터를 전송합니다.
-      await api.post("/api/post/write", finalData);
+      // 👈 4. 실제 게시물 생성 API 엔드포인트로 변경합니다.
+      const response = await api.post("/posts", finalData);
 
       alert("운동 기록이 성공적으로 저장되었습니다.");
-      navigate("/feed"); // 성공 후 피드 페이지로 이동
+
+      // 성공 후, 새로 생성된 게시물의 상세 페이지로 이동합니다.
+      // 백엔드 응답에 postId가 포함되어 있다고 가정합니다.
+      const newPostId = response.data.postId;
+      navigate(`/post/${newPostId}`);
     } catch (error) {
       console.error("기록 저장 에러:", error);
       alert("기록 저장에 실패했습니다. 입력 내용을 확인해주세요.");
+    } finally {
+      setIsSubmitting(false); // 👈 5. 요청 완료 후 로딩 상태 해제
     }
   };
 
@@ -184,6 +207,27 @@ export default function Post() {
               </div>
             </div>
           </div>
+
+          <div>
+            <label
+              htmlFor="location"
+              className="block text-sm font-medium leading-6 text-gray-900"
+            >
+              운동 장소
+            </label>
+            <div className="mt-1">
+              <input
+                type="text"
+                name="location"
+                id="location"
+                value={postData.location}
+                onChange={handleInputChange} // 기존 핸들러를 그대로 사용하면 됩니다!
+                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                placeholder="예: 스웻로그 짐, 집"
+              />
+            </div>
+          </div>
+
           <div>
             <label
               htmlFor="workoutType"
@@ -199,11 +243,10 @@ export default function Post() {
                 onChange={handleInputChange}
                 className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
               >
-                <option>웨이트 트레이닝</option>
-                <option>유산소</option>
-                <option>요가/필라테스</option>
-                <option>스포츠</option>
-                <option>스트레칭</option>
+                <option value="WEIGHT_TRAINING">웨이트 트레이닝</option>
+                <option value="CARDIO">유산소</option>
+                <option value="YOGA">요가</option>
+                <option value="PILATES">필라테스</option>
               </select>
             </div>
           </div>
@@ -361,11 +404,10 @@ export default function Post() {
 
         {/* --- 4. ImageUploader 컴포넌트를 폼의 적절한 위치에 추가합니다. --- */}
         <div>
-          <label className="block text-sm font-medium leading-6 text-gray-900">
-            인증샷
-          </label>
+          <label className="...">인증샷</label>
           <div className="mt-1">
-            <ImageUploader onUploadSuccess={setImageUrl} />
+            {/* 👇 uploadContext="post" prop을 추가합니다. */}
+            <ImageUploader onUploadSuccess={setImageUrl} uploadContext="post" />
           </div>
         </div>
 
@@ -390,9 +432,11 @@ export default function Post() {
         <div className="text-right">
           <button
             type="submit"
-            className="rounded-md border border-transparent bg-blue-600 px-6 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            // 👈 6. 로딩 상태일 때 버튼을 비활성화하여 중복 클릭을 방지합니다.
+            disabled={isSubmitting}
+            className="rounded-md border border-transparent bg-blue-600 px-6 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:bg-gray-400"
           >
-            기록 저장
+            {isSubmitting ? "저장 중..." : "기록 저장"}
           </button>
         </div>
       </form>

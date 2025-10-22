@@ -1,5 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
+import api from "../api/axios";
 
 // 댓글 데이터를 위한 가짜 데이터 (나중에는 API로 받아옵니다)
 const FAKE_COMMENTS = [
@@ -8,34 +9,44 @@ const FAKE_COMMENTS = [
 ];
 
 export default function PostCard({ post }) {
-  const [isLiked, setIsLiked] = useState(false);
-  const [likeCount, setLikeCount] = useState(post.likes);
-  const [commentsVisible, setCommentsVisible] = useState(false);
+  const [isLiked, setIsLiked] = useState(post.isLikedByUser || false);
+  const [likeCount, setLikeCount] = useState(post.likes || 0);
+  // const [commentsVisible, setCommentsVisible] = useState(false); // ⛔️ 이 줄이 아직 남아있다면 삭제!
+
+  // 👈 3. props로 받은 post 데이터가 변경될 때마다 내부 상태도 동기화합니다.
+  useEffect(() => {
+    setIsLiked(post.isLikedByUser || false);
+    setLikeCount(post.likes || 0);
+  }, [post]);
 
   if (!post) return null;
 
   // 3. '좋아요' 버튼을 클릭했을 때 실행될 함수
-  const handleLikeClick = () => {
-    // isLiked 상태를 현재와 반대로 뒤집습니다 (true -> false, false -> true)
-    setIsLiked(!isLiked);
+const handleLikeClick = async () => {
+  try {
+    // 👇 무조건 POST 요청만 보냅니다.
+    const response = await api.post(`/posts/${post.postId}/like`);
+    
+    // 👇 서버가 보내준 최신 데이터로 상태를 업데이트합니다. (더 정확!)
+    setIsLiked(response.data.isLiked);
+    setLikeCount(response.data.likeCount);
 
-    // isLiked 상태에 따라 좋아요 수를 1 증가시키거나 감소시킵니다.
-    setLikeCount(isLiked ? likeCount - 1 : likeCount + 1);
-
-    // TODO: 나중에 여기에 실제 백엔드 API (axios.post)를 호출하는 코드를 추가합니다.
-  };
-
-  console.log("PostCard가 받은 데이터:", post);
+  } catch (error) {
+    console.error("좋아요 처리 중 에러 발생:", error);
+    alert("요청을 처리하는 중 문제가 발생했습니다.");
+  }
+};
 
   return (
     <div className="overflow-hidden rounded-lg bg-white shadow">
       {/* --- 게시물 헤더 --- */}
       <div className="flex items-center p-4">
         <img
-          src={post.author.avatarUrl}
+          src={post.author.avatarUrl || `https://i.pravatar.cc/150?u=${post.author.id}`}
           alt={post.author.nickname}
           className="h-10 w-10 rounded-full object-cover"
         />
+        {/* 👈 6. 프로필 링크를 실제 백엔드 authorId로 연결 */}
         <Link
           to={`/profile/${post.author.id}`}
           className="ml-3 font-semibold hover:underline"
@@ -46,7 +57,8 @@ export default function PostCard({ post }) {
 
       {/* --- 게시물 이미지 --- */}
       {post.imageUrl && (
-        <Link to={`/post/${post.id}`}>
+        // 👈 7. 상세 페이지 링크를 실제 백엔드 postId로 연결
+        <Link to={`/post/${post.postId}`}>
           <div className="w-full">
             <img
               src={post.imageUrl}
@@ -57,12 +69,12 @@ export default function PostCard({ post }) {
         </Link>
       )}
 
+
       {/* --- 게시물 액션 버튼 --- */}
       <div className="flex gap-4 border-t border-gray-200 p-2">
-        {/* '좋아요' 버튼: onClick에 handleLikeClick을 연결 */}
+        {/* '좋아요' 버튼 */}
         <button onClick={handleLikeClick}>
           <svg
-            xmlns="http://www.w3.org/2000/svg"
             className={`h-6 w-6 transition-colors duration-200 ${
               isLiked ? "text-red-500" : "text-gray-500 hover:text-red-500"
             }`}
@@ -79,10 +91,10 @@ export default function PostCard({ post }) {
           </svg>
         </button>
 
-        {/* '댓글' 버튼: onClick에 setCommentsVisible을 연결 */}
-        <button
-          onClick={() => setCommentsVisible(!commentsVisible)}
+         <Link 
+          to={`/post/${post.postId}`} 
           className="text-gray-500 hover:text-blue-500"
+          aria-label="댓글 보기"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -98,8 +110,9 @@ export default function PostCard({ post }) {
               d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
             />
           </svg>
-        </button>
+        </Link>
       </div>
+
 
       {/* --- 좋아요 수 --- */}
       <div className="px-4 pb-2">
@@ -116,22 +129,16 @@ export default function PostCard({ post }) {
           {post.content}
         </p>
       </div>
-      {commentsVisible && (
-        <div className="border-t border-gray-200 p-4">
-          <div className="mb-4 space-y-2">
-            {FAKE_COMMENTS.map((comment) => (
-              <div key={comment.id} className="text-sm">
-                <span className="font-semibold">{comment.author}</span>
-                <span className="ml-2">{comment.text}</span>
-              </div>
-            ))}
+      
+      {/* 
+        카드 내 댓글 기능은 PostDetail 페이지에 집중시키므로 주석 처리합니다.
+        {commentsVisible && (
+          <div className="border-t border-gray-200 p-4">
+            ... (내용) ...
           </div>
-          <form className="flex gap-2">
-            <input type="text" placeholder="댓글 달기..." /* ... */ />
-            <button type="submit" /* ... */>게시</button>
-          </form>
-        </div>
-      )}
-    </div>
+        )}
+      */}
+
+    </div> // </div> of PostCard component
   );
 }
