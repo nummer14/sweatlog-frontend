@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react"; // 👈 1. useState, useEffect import
 import { Link, useNavigate } from "react-router-dom"; // 👈 2. useNavigate import (수정/삭제 후 이동용)
-import api from "../api/axios"; // 👈 3. api 인스턴스 import
+import api from "../api/axios";
 
 export default function MyRoutines() {
   const navigate = useNavigate();
@@ -17,8 +17,8 @@ export default function MyRoutines() {
     const fetchRoutines = async () => {
       try {
         setLoading(true);
-        // ✅ GET /api/routine (내 전체 루틴 조회) - 우리가 유추한 엔드포인트
-        const response = await api.get("/api/routine");
+        const response = await api.get("/api/routines");
+        console.log("서버로부터 받은 루틴 데이터:", response.data);
         setRoutines(response.data);
       } catch (err) {
         console.error("루틴 목록을 불러오는 데 실패했습니다:", err);
@@ -38,17 +38,19 @@ export default function MyRoutines() {
     }
     try {
       // ✅ DELETE /api/routine/{routineId} (루틴 삭제)
-      await api.delete(`/api/routine/${routineId}`);
+      await api.delete(`/api/routines/${routineId}`);
 
       // 성공 시, 화면(상태)에서도 해당 루틴을 즉시 제거
-      setRoutines((prevRoutines) => prevRoutines.filter((r) => r.id !== routineId));
+      setRoutines((prevRoutines) =>
+        prevRoutines.filter((r) => r.id !== routineId)
+      );
       alert("루틴이 삭제되었습니다.");
     } catch (err) {
       console.error("루틴 삭제 실패:", err);
       alert("루틴 삭제에 실패했습니다.");
     }
   };
-  
+
   // 👈 7. 로딩 및 에러 상태 UI 처리
   if (loading) {
     return <div className="p-8 text-center">루틴 목록을 불러오는 중...</div>;
@@ -78,20 +80,21 @@ export default function MyRoutines() {
               className="flex items-center justify-between rounded-lg bg-white p-4 shadow"
             >
               <div>
-                <p className="font-semibold">{routine.routineName}</p> {/* 백엔드 응답 key가 'routineName'이라고 가정 */}
+                <p className="font-semibold">{routine.name}</p>{" "}
+                {/* 백엔드 응답 key가 'routineName'이라고 가정 */}
                 <p className="text-sm text-gray-500">
-                  {routine.exerciseCount || routine.details?.length || 0}개의 운동
+                  {routine.details?.length || 0}개의 운동
                 </p>
               </div>
               {/* 👈 8. 수정/삭제 버튼 기능 연결 */}
               <div className="flex gap-4">
-                <button 
+                <button
                   onClick={() => navigate(`/routines/edit/${routine.id}`)} // 수정 페이지로 이동
                   className="text-sm font-semibold text-blue-600 hover:text-blue-500"
                 >
                   수정
                 </button>
-                <button 
+                <button
                   onClick={() => handleRoutineDelete(routine.id)}
                   className="text-sm font-semibold text-red-600 hover:text-red-500"
                 >

@@ -23,10 +23,10 @@ function Header() {
 
         <div className="flex items-center space-x-4">
           <Link to="/feed" className="text-gray-600 hover:text-blue-500">
-            소셜 피드
+            홈
           </Link>
           <Link to="/post" className="text-gray-600 hover:text-blue-500">
-            운동 기록
+            나의 기록
           </Link>
           <Link to="/routines" className="text-gray-600 hover:text-blue-500">
             나의 루틴
@@ -53,12 +53,9 @@ function Header() {
             <>
               <Link
                 to="/login"
-                className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700"
+                className="rounded-md bg-red-700 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-800"
               >
                 로그인
-              </Link>
-              <Link to="/signup" className="text-sm font-semibold text-gray-700 hover:text-gray-900">
-                회원가입
               </Link>
             </>
           )}

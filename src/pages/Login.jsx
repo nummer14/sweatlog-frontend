@@ -106,7 +106,7 @@ export default function Login() {
             <button
               type="submit"
               disabled={isSubmitting} // 버튼 비활성화 추가
-              className="group relative flex w-full justify-center rounded-md border border-transparent bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:bg-gray-400"
+              className="group relative flex w-full justify-center rounded-md border border-transparent bg-red-700 px-4 py-2 text-sm font-medium text-white hover:bg-brand-red-dark focus:outline-none focus:ring-2 focus:ring-brand-red-dark focus:ring-offset-2 disabled:bg-gray-400"
             >
               {isSubmitting ? "로그인 중..." : "로그인"}
             </button>
@@ -116,7 +116,7 @@ export default function Login() {
         <div className="text-sm">
           <Link
             to="/signup"
-            className="font-medium text-blue-600 hover:text-blue-500"
+            className="font-medium text-red-700 hover:text-brand-red-dark"
           >
             계정이 없으신가요? 회원가입
           </Link>

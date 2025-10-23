@@ -23,14 +23,13 @@ const useAuthStore = create(
         accessToken: token, // 저장할 때도 accessToken으로 저장합니다.
       }),
 
-      logout: () => set({
-        isLoggedIn: false,
-        user: null,
-        accessToken: null, // 초기화할 때도 accessToken을 null로 만듭니다.
-      }),
+      logout: () => {
+        set({ isLoggedIn: false, user: null, accessToken: null });
+        window.location.href = '/login';
+      },
     }),
     {
-      name: 'auth-storage', // localStorage에 저장될 때 사용될 키 이름
+      name: 'auth-storage',
     }
   )
 );

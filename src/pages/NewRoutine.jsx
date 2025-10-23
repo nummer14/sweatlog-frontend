@@ -18,7 +18,7 @@ export default function NewRoutine() {
   const [day, setDay] = useState("MONDAY"); // 기본값을 'MONDAY'로 설정
   const [isSubmitting, setIsSubmitting] = useState(false); // 👈 2. 중복 제출 방지 상태 추가
 
-  // --- Post.jsx에서 가져온 핸들러 함수들 (거의 동일) ---
+  // --- Post.jsx에서 가져온 핸들러 함수들
   const handleWorkoutNameChange = (id, value) => {
     setWorkouts(workouts.map((w) => (w.id === id ? { ...w, name: value } : w)));
   };
