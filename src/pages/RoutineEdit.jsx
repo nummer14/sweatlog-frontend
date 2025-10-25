@@ -1,14 +1,46 @@
-import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useEffect, useState } from "react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import api from "@/api/axios";
 
-export default function NewRoutine() {
+export default function RoutineEdit() {
+  const { id } = useParams();
+  const { state } = useLocation();
   const navigate = useNavigate();
+
   const [routineName, setRoutineName] = useState("");
   const [details, setDetails] = useState([
     { name: "", weight: "", reps: "", sets: "" },
   ]);
-  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    // 목록/상세에서 넘어온 state 우선
+    if (state) {
+      const r = state;
+      setRoutineName(r.routineName ?? r.name ?? "");
+      setDetails(
+        Array.isArray(r.details) && r.details.length
+          ? r.details
+          : [{ name: "", weight: "", reps: "", sets: "" }]
+      );
+      return;
+    }
+    // 없으면 전체 받아서 찾아오기
+    (async () => {
+      const res = await api.get("/routine", {
+        params: { page: 0, size: 1000 },
+      });
+      const arr = Array.isArray(res.data?.content) ? res.data.content : [];
+      const found = arr.find((r) => String(r.id ?? r.routineId) === String(id));
+      if (found) {
+        setRoutineName(found.routineName ?? found.name ?? "");
+        setDetails(
+          Array.isArray(found.details) && found.details.length
+            ? found.details
+            : [{ name: "", weight: "", reps: "", sets: "" }]
+        );
+      }
+    })();
+  }, [id, state]);
 
   const addRow = () =>
     setDetails((arr) => [...arr, { name: "", weight: "", reps: "", sets: "" }]);
@@ -19,22 +51,9 @@ export default function NewRoutine() {
       arr.map((r, i) => (i === idx ? { ...r, [key]: val } : r))
     );
 
-  async function tryCreate(payload) {
-    try {
-      const res = await api.post("/routine", payload);
-      return res;
-    } catch (e) {
-      return Promise.reject(e);
-    }
-  }
-
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (submitting) return;
 
-    setSubmitting(true);
-
-    // 상세 필드 정리
     const cleaned = details
       .filter((d) => d.name?.trim())
       .map((d) => ({
@@ -44,45 +63,38 @@ export default function NewRoutine() {
         sets: d.sets !== "" ? Number(d.sets) : null,
       }));
 
-    // 최소 1개 보장(백엔드 @Valid 대비)
-    const safeDetails = cleaned.length
-      ? cleaned
-      : [{ name: "운동", weight: 0, reps: 0, sets: 0 }];
-
-    // ✅ DTO 불일치 400 방지: 흔한 스키마 여러 개 순차 시도
-    const candidates = [
-      { routineName, details: safeDetails },
-      { name: routineName, details: safeDetails },
-      { routineName, routineDetails: safeDetails },
-      { name: routineName, exercises: safeDetails },
+    const payloads = [
+      { routineName, details: cleaned },
+      { name: routineName, details: cleaned },
+      { routineName, routineDetails: cleaned },
     ];
 
-    let lastErr = null;
-    for (const p of candidates) {
+    let ok = false,
+      lastErr = null;
+    for (const p of payloads) {
       try {
-        await tryCreate(p);
-        alert("루틴이 저장되었습니다.");
-        navigate("/routines");
-        setSubmitting(false);
-        return;
+        await api.put(`/routine/${id}`, p);
+        ok = true;
+        break;
       } catch (e) {
         lastErr = e;
       }
     }
 
-    console.error(lastErr);
-    const serverMsg =
-      lastErr?.response?.data?.message ||
-      lastErr?.response?.data?.error ||
-      JSON.stringify(lastErr?.response?.data ?? {});
-    alert("루틴 저장에 실패했습니다.\n" + serverMsg);
-    setSubmitting(false);
+    if (!ok) {
+      const msg =
+        lastErr?.response?.data?.message ||
+        JSON.stringify(lastErr?.response?.data ?? {});
+      alert("수정 실패\n" + msg);
+      return;
+    }
+    alert("수정되었습니다.");
+    navigate(`/routines/${id}`);
   };
 
   return (
     <div className="container mx-auto max-w-2xl p-4 space-y-6">
-      <h1 className="text-3xl font-bold">새 루틴 만들기</h1>
-
+      <h1 className="text-3xl font-bold">루틴 수정</h1>
       <form className="space-y-6" onSubmit={handleSubmit}>
         <div>
           <label className="mb-1 block text-sm font-medium">루틴 이름</label>
@@ -90,7 +102,6 @@ export default function NewRoutine() {
             value={routineName}
             onChange={(e) => setRoutineName(e.target.value)}
             className="w-full rounded-md border px-3 py-2"
-            placeholder="예: 가슴/삼두 루틴"
             required
           />
         </div>
@@ -111,36 +122,28 @@ export default function NewRoutine() {
             <div key={i} className="grid grid-cols-12 gap-2">
               <input
                 className="col-span-4 rounded-md border px-3 py-2"
-                placeholder="운동명"
-                value={d.name}
+                value={d.name ?? ""}
                 onChange={(e) => changeRow(i, "name", e.target.value)}
-                required
               />
               <input
                 className="col-span-2 rounded-md border px-3 py-2"
-                placeholder="무게"
-                value={d.weight}
+                value={d.weight ?? ""}
                 onChange={(e) => changeRow(i, "weight", e.target.value)}
-                inputMode="numeric"
               />
               <input
                 className="col-span-2 rounded-md border px-3 py-2"
-                placeholder="횟수"
-                value={d.reps}
+                value={d.reps ?? ""}
                 onChange={(e) => changeRow(i, "reps", e.target.value)}
-                inputMode="numeric"
               />
               <input
                 className="col-span-2 rounded-md border px-3 py-2"
-                placeholder="세트"
-                value={d.sets}
+                value={d.sets ?? ""}
                 onChange={(e) => changeRow(i, "sets", e.target.value)}
-                inputMode="numeric"
               />
               <button
                 type="button"
                 onClick={() => removeRow(i)}
-                className="col-span-2 rounded-md border px-3 py-2 text-sm hover:bg-gray-50"
+                className="col-span-2 rounded-md border px-3 py-2 text-sm"
               >
                 제거
               </button>
@@ -148,15 +151,9 @@ export default function NewRoutine() {
           ))}
         </div>
 
-        <div className="pt-2">
-          <button
-            type="submit"
-            disabled={submitting}
-            className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-60"
-          >
-            {submitting ? "저장 중..." : "저장"}
-          </button>
-        </div>
+        <button className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:opacity-90">
+          저장
+        </button>
       </form>
     </div>
   );

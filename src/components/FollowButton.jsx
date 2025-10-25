@@ -22,9 +22,7 @@ export default function FollowButton({ targetUserId }) {
       try {
         setIsLoading(true);
         // ✅ GET /api/users/{userId}/follow-status (팔로우 상태 조회)
-        const response = await api.get(
-          `/api/users/${targetUserId}/follow-status`
-        );
+        const response = await api.get(`/users/${targetUserId}/follow-status`);
         // 서버로부터 받은 실제 팔로우 상태(true/false)로 상태를 업데이트합니다.
         setIsFollowing(response.data.isFollowing);
       } catch (error) {
@@ -42,7 +40,7 @@ export default function FollowButton({ targetUserId }) {
     try {
       // ✅ POST /api/users/{userId}/follow (팔로우/언팔로우 토글)
       // 백엔드 컨트롤러에서 확인한 실제 엔드포인트로 수정합니다.
-      await api.post(`/api/users/${targetUserId}/follow`);
+      await api.post(`/users/${targetUserId}/follow`);
 
       // API 호출 성공 시, 버튼의 상태를 즉시 반대로 변경합니다.
       setIsFollowing((prev) => !prev);

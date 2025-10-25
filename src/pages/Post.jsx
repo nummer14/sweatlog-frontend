@@ -1,444 +1,213 @@
 import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import api from "../api/axios";
-import ImageUploader from "../components/ImageUploader";
+import api from "@/api/axios";
 
-// 웨이트 운동 항목의 초기 상태
-const createNewWorkout = () => ({
-  name: "",
-  sets: [{ weight: "", reps: "" }],
-});
-
-// 유산소 운동 항목의 초기 상태
-const createNewCardio = () => ({
-  type: "달리기",
-  distance: "",
-  time: "",
-  customType: "",
-});
+const today = () => new Date().toISOString().slice(0, 10);
 
 export default function Post() {
-  const navigate = useNavigate();
+  const [title, setTitle] = useState("");
+  const [memo, setMemo] = useState("");
+  const [category, setCategory] = useState("WEIGHT_TRAINING"); // 백엔드 enum 가정
+  const [date, setDate] = useState(today());
+  const [startTime, setStartTime] = useState("09:00");
+  const [endTime, setEndTime] = useState("10:00");
+  const [rows, setRows] = useState([
+    { name: "", weight: "", reps: "", sets: "", duration: "" },
+  ]);
+  const [saving, setSaving] = useState(false);
 
-  const [postData, setPostData] = useState({
-    date: new Date().toISOString().slice(0, 10),
-    startTime: "09:00",
-    endTime: "10:00",
-    workoutType: "웨이트 트레이닝",
-    location: "",
-    workouts: [createNewWorkout()],
-    cardios: [createNewCardio()], // 유산소 데이터 상태 추가
-    memo: "",
-  });
+  const addRow = () =>
+    setRows((a) => [
+      ...a,
+      { name: "", weight: "", reps: "", sets: "", duration: "" },
+    ]);
+  const removeRow = (i) => setRows((a) => a.filter((_, idx) => idx !== i));
+  const changeRow = (i, k, v) =>
+    setRows((a) => a.map((r, idx) => (idx === i ? { ...r, [k]: v } : r)));
 
-  // 업로드된 이미지 URL을 저장할 새로운 상태를 추가합니다.
-  const [imageUrl, setImageUrl] = useState("");
-
-  // 👈 1. API 요청 중복 제출을 막기 위한 로딩 상태 추가
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  // --- 핸들러 함수들 ---
-
-  // 기본 정보(날짜, 시간, 종류, 메모)를 처리하는 함수
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setPostData((prev) => ({ ...prev, [name]: value }));
-  };
-
-  // 웨이트 운동의 '운동명'을 변경하는 함수
-  const handleWorkoutNameChange = (index, value) => {
-    const updatedWorkouts = [...postData.workouts];
-    updatedWorkouts[index].name = value;
-    setPostData((prev) => ({ ...prev, workouts: updatedWorkouts }));
-  };
-
-  // 웨이트 운동의 '세트' 정보를 변경하는 함수
-  const handleSetChange = (workoutIndex, setIndex, e) => {
-    const { name, value } = e.target;
-    const updatedWorkouts = [...postData.workouts];
-    updatedWorkouts[workoutIndex].sets[setIndex][name] = value;
-    setPostData((prev) => ({ ...prev, workouts: updatedWorkouts }));
-  };
-
-  // 유산소 운동의 정보를 변경하는 함수
-  const handleCardioChange = (index, e) => {
-    const { name, value } = e.target;
-    const updatedCardios = [...postData.cardios];
-    const currentCardio = { ...updatedCardios[index] };
-
-    currentCardio[name] = value;
-
-    // 만약 드롭다운 메뉴를 '기타'가 아닌 다른 것으로 바꾸면,
-    // 직접 입력했던 내용은 깨끗하게 지워줍니다. (사용자 경험 개선)
-    if (name === "type" && value !== "기타") {
-      currentCardio.customType = "";
+  async function tryPost(payload) {
+    try {
+      const res = await api.post("/posts", payload);
+      return res;
+    } catch (e) {
+      return Promise.reject(e);
     }
+  }
 
-    updatedCardios[index] = currentCardio;
-    setPostData((prev) => ({ ...prev, cardios: updatedCardios }));
-  };
-
-  // 웨이트 운동에 '세트 추가'
-  const addSet = (workoutIndex) => {
-    const updatedWorkouts = [...postData.workouts];
-    updatedWorkouts[workoutIndex].sets.push({ weight: "", reps: "" });
-    setPostData((prev) => ({ ...prev, workouts: updatedWorkouts }));
-  };
-
-  // 웨이트 운동에 '다른 운동 추가'
-  const addWorkout = () => {
-    setPostData((prev) => ({
-      ...prev,
-      workouts: [...prev.workouts, createNewWorkout()],
-    }));
-  };
-
-  // 폼 전체 제출
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (saving) return;
+    setSaving(true);
 
-    // 👈 2. 로딩 상태를 확인하여 중복 제출 방지
-    if (isSubmitting) return;
-    setIsSubmitting(true);
+    const details = rows
+      .filter((d) => d.name?.trim())
+      .map((d) => ({
+        name: d.name?.trim(),
+        weight: d.weight !== "" ? Number(d.weight) : null,
+        reps: d.reps !== "" ? Number(d.reps) : null,
+        sets: d.sets !== "" ? Number(d.sets) : null,
+        duration: d.duration !== "" ? Number(d.duration) : null,
+      }));
 
-    // 👈 3. 백엔드의 PostRequest.java DTO 형식에 맞게 데이터를 재구성합니다.
-    const finalData = {
-      date: postData.date,
-      startTime: postData.startTime,
-      endTime: postData.endTime,
-      memo: postData.memo,
-      imageUrl: imageUrl,
-      category: postData.workoutType, 
-      postDetails: postData.workouts.map(workout => ({
-        workoutName: workout.name,
-        sets: workout.sets.map((set) => ({
-          weight: parseFloat(set.weight) || 0, // 숫자로 변환
-          reps: parseInt(set.reps, 10) || 0, // 숫자로 변환
-        })),
-      })),
-      // cardio 데이터 등 다른 데이터도 백엔드 DTO에 따라 추가할 수 있습니다.
+    const ensure = details.length
+      ? details
+      : [{ name: "운동", weight: 0, reps: 0, sets: 0, duration: 0 }];
+
+    const base = {
+      title: title?.trim(),
+      memo: memo?.trim(),
+      category,
+      date, // "YYYY-MM-DD"
+      startTime: `${startTime}:00`,
+      endTime: `${endTime}:00`,
     };
 
-    try {
-      console.log("백엔드로 전송될 데이터:", finalData);
+    const candidates = [
+      { ...base, details: ensure },
+      { ...base, postDetails: ensure },
+      {
+        title: base.title,
+        memo: base.memo,
+        category: base.category,
+        postDetails: ensure,
+      }, // 시간/날짜 미사용 스키마
+    ];
 
-      // 👈 4. 실제 게시물 생성 API 엔드포인트로 변경합니다.
-      const response = await api.post("/posts", finalData);
-
-      alert("운동 기록이 성공적으로 저장되었습니다.");
-
-      // 성공 후, 새로 생성된 게시물의 상세 페이지로 이동합니다.
-      // 백엔드 응답에 postId가 포함되어 있다고 가정합니다.
-      const newPostId = response.data.postId;
-      navigate(`/post/${newPostId}`);
-    } catch (error) {
-      console.error("기록 저장 에러:", error);
-      alert("기록 저장에 실패했습니다. 입력 내용을 확인해주세요.");
-    } finally {
-      setIsSubmitting(false); // 👈 5. 요청 완료 후 로딩 상태 해제
+    let lastErr = null;
+    for (const p of candidates) {
+      try {
+        await tryPost(p);
+        alert("저장되었습니다.");
+        setTitle("");
+        setMemo("");
+        setRows([{ name: "", weight: "", reps: "", sets: "", duration: "" }]);
+        setSaving(false);
+        return;
+      } catch (e2) {
+        lastErr = e2;
+      }
     }
+
+    console.error(lastErr);
+    const msg =
+      lastErr?.response?.data?.message ||
+      lastErr?.response?.data?.error ||
+      JSON.stringify(lastErr?.response?.data ?? {});
+    alert("저장 실패\n" + msg);
+    setSaving(false);
   };
 
   return (
-    <div className="container mx-auto max-w-2xl p-4 sm:p-6 lg:p-8">
-      <h1 className="mb-6 text-center text-3xl font-bold text-gray-800">
-        오늘의 운동 기록
-      </h1>
+    <div className="container mx-auto max-w-2xl p-4 space-y-6">
+      <h1 className="text-3xl font-bold">운동 기록하기</h1>
 
-      <form
-        onSubmit={handleSubmit}
-        className="space-y-6 rounded-lg bg-white p-8 shadow-lg"
-      >
-        {/* --- 1. 기본 정보 --- */}
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-3">
-            <div>
-              <label
-                htmlFor="date"
-                className="block text-sm font-medium leading-6 text-gray-900"
-              >
-                운동 날짜
-              </label>
-              <div className="mt-1">
-                <input
-                  type="date"
-                  name="date"
-                  id="date"
-                  value={postData.date}
-                  onChange={handleInputChange}
-                  className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                />
-              </div>
-            </div>
-            <div>
-              <label
-                htmlFor="startTime"
-                className="block text-sm font-medium leading-6 text-gray-900"
-              >
-                시작 시간
-              </label>
-              <div className="mt-1">
-                <input
-                  type="time"
-                  name="startTime"
-                  id="startTime"
-                  value={postData.startTime}
-                  onChange={handleInputChange}
-                  className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                />
-              </div>
-            </div>
-            <div>
-              <label
-                htmlFor="endTime"
-                className="block text-sm font-medium leading-6 text-gray-900"
-              >
-                종료 시간
-              </label>
-              <div className="mt-1">
-                <input
-                  type="time"
-                  name="endTime"
-                  id="endTime"
-                  value={postData.endTime}
-                  onChange={handleInputChange}
-                  className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                />
-              </div>
-            </div>
-          </div>
+      <form className="space-y-4" onSubmit={handleSubmit}>
+        <input
+          className="w-full rounded-md border px-3 py-2"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="제목"
+          required
+        />
+        <textarea
+          className="w-full rounded-md border px-3 py-2"
+          rows={4}
+          value={memo}
+          onChange={(e) => setMemo(e.target.value)}
+          placeholder="메모"
+        />
 
-          <div>
-            <label
-              htmlFor="location"
-              className="block text-sm font-medium leading-6 text-gray-900"
-            >
-              운동 장소
-            </label>
-            <div className="mt-1">
-              <input
-                type="text"
-                name="location"
-                id="location"
-                value={postData.location}
-                onChange={handleInputChange} // 기존 핸들러를 그대로 사용하면 됩니다!
-                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                placeholder="예: 스웻로그 짐, 집"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label
-              htmlFor="workoutType"
-              className="block text-sm font-medium leading-6 text-gray-900"
-            >
-              운동 종류
-            </label>
-            <div className="mt-1">
-              <select
-                id="workoutType"
-                name="workoutType"
-                value={postData.workoutType}
-                onChange={handleInputChange}
-                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-              >
-                <option value="WEIGHT_TRAINING">웨이트 트레이닝</option>
-                <option value="CARDIO">유산소</option>
-                <option value="YOGA">요가</option>
-                <option value="PILATES">필라테스</option>
-              </select>
-            </div>
-          </div>
+        <div className="grid grid-cols-2 gap-2">
+          <select
+            className="rounded-md border px-3 py-2"
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+          >
+            <option value="WEIGHT_TRAINING">웨이트</option>
+            <option value="CARDIO">유산소</option>
+            <option value="ETC">기타</option>
+          </select>
+          <input
+            type="date"
+            className="rounded-md border px-3 py-2"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+          />
+          <input
+            type="time"
+            className="rounded-md border px-3 py-2"
+            value={startTime}
+            onChange={(e) => setStartTime(e.target.value)}
+          />
+          <input
+            type="time"
+            className="rounded-md border px-3 py-2"
+            value={endTime}
+            onChange={(e) => setEndTime(e.target.value)}
+          />
         </div>
 
-        {/* --- 2. 상세 기록 (조건부 렌더링) --- */}
-
-        {/* 웨이트 트레이닝 폼 */}
-        {postData.workoutType === "웨이트 트레이닝" && (
-          <div className="space-y-4">
-            {postData.workouts.map((workout, workoutIndex) => (
-              <div
-                key={workoutIndex}
-                className="space-y-4 rounded-md border border-gray-200 p-4"
-              >
-                <input
-                  type="text"
-                  placeholder={`운동 ${workoutIndex + 1} (예: 벤치프레스)`}
-                  value={workout.name}
-                  onChange={(e) =>
-                    handleWorkoutNameChange(workoutIndex, e.target.value)
-                  }
-                  className="block w-full rounded-md border-gray-300 font-semibold shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                />
-                {workout.sets.map((set, setIndex) => (
-                  <div key={setIndex} className="flex items-center gap-2">
-                    <span className="w-16 text-sm text-gray-500">
-                      {setIndex + 1}세트
-                    </span>
-                    <input
-                      type="number"
-                      name="weight"
-                      placeholder="무게(kg)"
-                      value={set.weight}
-                      onChange={(e) =>
-                        handleSetChange(workoutIndex, setIndex, e)
-                      }
-                      className="block w-full rounded-md border-gray-300 text-sm shadow-sm"
-                    />
-                    <input
-                      type="number"
-                      name="reps"
-                      placeholder="횟수"
-                      value={set.reps}
-                      onChange={(e) =>
-                        handleSetChange(workoutIndex, setIndex, e)
-                      }
-                      className="block w-full rounded-md border-gray-300 text-sm shadow-sm"
-                    />
-                  </div>
-                ))}
-                <button
-                  type="button"
-                  onClick={() => addSet(workoutIndex)}
-                  className="text-sm font-medium text-blue-600 hover:text-blue-500"
-                >
-                  + 세트 추가
-                </button>
-              </div>
-            ))}
+        <div className="space-y-3 pt-2">
+          <div className="flex items-center justify-between">
+            <label className="text-sm font-medium">운동 상세</label>
             <button
               type="button"
-              onClick={addWorkout}
-              className="w-full rounded-md border-2 border-dashed border-gray-300 py-2 text-sm font-medium text-gray-500 hover:bg-gray-50"
+              onClick={addRow}
+              className="rounded-md bg-gray-100 px-3 py-1 text-sm hover:bg-gray-200"
             >
-              + 다른 운동 추가하기
+              + 추가
             </button>
           </div>
-        )}
 
-        {/* 유산소 폼 */}
-        {postData.workoutType === "유산소" && (
-          // 지금은 유산소 항목 1개만 관리한다고 가정 (0번째 인덱스 사용)
-          <div className="space-y-4 rounded-md border border-gray-200 p-4">
-            <h3 className="font-semibold text-gray-800">유산소 운동 기록</h3>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <div>
-                <label
-                  htmlFor="cardioType"
-                  className="block text-sm font-medium text-gray-700"
-                >
-                  종류
-                </label>
-                <select
-                  id="cardioType"
-                  name="type"
-                  value={postData.cardios[0].type}
-                  onChange={(e) => handleCardioChange(0, e)}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                >
-                  <option>달리기</option>
-                  <option>사이클</option>
-                  <option>등산</option>
-                  <option>걷기</option>
-                  <option>숨쉬기</option>
-                  <option>기타</option>
-                </select>
-              </div>
-              <div>
-                <label
-                  htmlFor="distance"
-                  className="block text-sm font-medium text-gray-700"
-                >
-                  거리 (km)
-                </label>
-                <input
-                  type="number"
-                  id="distance"
-                  name="distance"
-                  placeholder="예: 5"
-                  value={postData.cardios[0].distance}
-                  onChange={(e) => handleCardioChange(0, e)}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                />
-              </div>
-              <div>
-                <label
-                  htmlFor="time"
-                  className="block text-sm font-medium text-gray-700"
-                >
-                  시간 (분)
-                </label>
-                <input
-                  type="number"
-                  id="time"
-                  name="time"
-                  placeholder="예: 30"
-                  value={postData.cardios[0].time}
-                  onChange={(e) => handleCardioChange(0, e)}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                />
-              </div>
+          {rows.map((d, i) => (
+            <div key={i} className="grid grid-cols-12 gap-2">
+              <input
+                className="col-span-4 rounded-md border px-3 py-2"
+                placeholder="운동명"
+                value={d.name}
+                onChange={(e) => changeRow(i, "name", e.target.value)}
+              />
+              <input
+                className="col-span-2 rounded-md border px-3 py-2"
+                placeholder="무게"
+                value={d.weight}
+                onChange={(e) => changeRow(i, "weight", e.target.value)}
+              />
+              <input
+                className="col-span-2 rounded-md border px-3 py-2"
+                placeholder="횟수"
+                value={d.reps}
+                onChange={(e) => changeRow(i, "reps", e.target.value)}
+              />
+              <input
+                className="col-span-2 rounded-md border px-3 py-2"
+                placeholder="세트"
+                value={d.sets}
+                onChange={(e) => changeRow(i, "sets", e.target.value)}
+              />
+              <input
+                className="col-span-1 rounded-md border px-3 py-2"
+                placeholder="분"
+                value={d.duration}
+                onChange={(e) => changeRow(i, "duration", e.target.value)}
+              />
+              <button
+                type="button"
+                onClick={() => removeRow(i)}
+                className="col-span-1 rounded-md border px-3 py-2 text-sm"
+              >
+                제거
+              </button>
             </div>
-            {postData.cardios[0].type === "기타" && (
-              <div className="mt-4">
-                <label
-                  htmlFor="customCardioType"
-                  className="block text-sm font-medium text-gray-700"
-                >
-                  운동 종류 직접 입력
-                </label>
-                <input
-                  type="text"
-                  id="customCardioType"
-                  name="customType"
-                  placeholder="예: 천국의 계단"
-                  value={postData.cardios[0].customType}
-                  onChange={(e) => handleCardioChange(0, e)}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                />
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* --- 4. ImageUploader 컴포넌트를 폼의 적절한 위치에 추가합니다. --- */}
-        <div>
-          <label className="...">인증샷</label>
-          <div className="mt-1">
-            {/* 👇 uploadContext="post" prop을 추가합니다. */}
-            <ImageUploader onUploadSuccess={setImageUrl} uploadContext="post" />
-          </div>
+          ))}
         </div>
 
-        {/* --- 3. 메모 및 저장 버튼 --- */}
-        <div>
-          <label
-            htmlFor="memo"
-            className="block text-sm font-medium text-gray-700"
-          >
-            메모
-          </label>
-          <textarea
-            id="memo"
-            name="memo"
-            rows="4"
-            value={postData.memo}
-            onChange={handleInputChange}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-            placeholder="오늘의 컨디션, 느낀 점 등을 자유롭게 기록하세요."
-          ></textarea>
-        </div>
-        <div className="text-right">
-          <button
-            type="submit"
-            // 👈 6. 로딩 상태일 때 버튼을 비활성화하여 중복 클릭을 방지합니다.
-            disabled={isSubmitting}
-            className="rounded-md border border-transparent bg-blue-600 px-6 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:bg-gray-400"
-          >
-            {isSubmitting ? "저장 중..." : "기록 저장"}
-          </button>
-        </div>
+        <button
+          type="submit"
+          disabled={saving}
+          className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-60"
+        >
+          {saving ? "저장 중..." : "저장"}
+        </button>
       </form>
     </div>
   );

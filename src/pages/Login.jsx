@@ -5,6 +5,7 @@ import Logo from "../components/Logo";
 import useAuthStore from "../store/authStore"; // 1. 우리가 만든 저장소를 import 합니다.
 import { useNavigate } from "react-router-dom"; // 2. 페이지 이동을 위한 훅을 import 합니다.
 
+const ENABLE_GOOGLE = import.meta.env.VITE_ENABLE_GOOGLE_OAUTH === "true";
 export default function Login() {
   const { login } = useAuthStore();
   const navigate = useNavigate();
@@ -106,7 +107,7 @@ export default function Login() {
             <button
               type="submit"
               disabled={isSubmitting} // 버튼 비활성화 추가
-              className="group relative flex w-full justify-center rounded-md border border-transparent bg-red-700 px-4 py-2 text-sm font-medium text-white hover:bg-brand-red-dark focus:outline-none focus:ring-2 focus:ring-brand-red-dark focus:ring-offset-2 disabled:bg-gray-400"
+              className="group relative flex w-full justify-center rounded-md border border-transparent bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:bg-gray-400"
             >
               {isSubmitting ? "로그인 중..." : "로그인"}
             </button>
@@ -116,7 +117,7 @@ export default function Login() {
         <div className="text-sm">
           <Link
             to="/signup"
-            className="font-medium text-red-700 hover:text-brand-red-dark"
+            className="font-medium text-blue-600 hover:text-blue-500"
           >
             계정이 없으신가요? 회원가입
           </Link>

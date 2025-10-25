@@ -30,9 +30,7 @@ export default function ImageUploader({
 
     setIsUploading(true);
     try {
-      const { data } = await api.post("/api/upload/image", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      const { data } = await api.post("/upload/image", formData, { headers: { "Content-Type": "multipart/form-data" } });
 
       onUploadSuccess(data);
     } catch (error) {

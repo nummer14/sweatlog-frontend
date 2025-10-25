@@ -1,87 +1,118 @@
-import React, { useState, useEffect } from "react";
-import { useParams } from "react-router-dom";
-import api from "../api/axios";
-import FollowButton from "../components/FollowButton";
-import useAuthStore from "../store/authStore";
+import React, { useEffect, useState } from "react";
+import api from "@/api/axios";
 
 export default function UserProfile() {
-  // URL의 파라미터(예: /profile/101 -> { userId: '101' })를 가져옵니다.
-  const { userId } = useParams();
-  const { user: me } = useAuthStore(); // 현재 로그인한 내 정보
+  const [me, setMe] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [myPostCount, setMyPostCount] = useState(0);
 
-  const [profileData, setProfileData] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
+  async function loadMe() {
+    const res = await api.get("/users/me");
+    setMe(res.data);
+  }
+
+  async function loadMyPostCount(userId) {
+    // 페이지네이션 totalElements 이용
+    const res = await api.get(`/posts/user/${userId}`, {
+      params: { page: 0, size: 1 },
+    });
+    setMyPostCount(Number(res.data?.totalElements ?? 0));
+  }
 
   useEffect(() => {
-    const fetchUserProfile = async () => {
-      setIsLoading(true);
-      setError(null); // 에러 상태 초기화
-      try {
-        // 👇 이 부분의 경로를 가장 표준적인 형태로 수정합니다.
-        const response = await api.get(`/api/users/${userId}`);
-        setProfileData(response.data);
-      } catch (err) {
-        setError("프로필을 불러올 수 없습니다.");
-        console.error(err);
-      } finally {
-        setIsLoading(false);
+    (async () => {
+      await loadMe();
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (me?.id) loadMyPostCount(me.id);
+  }, [me?.id]);
+
+  const onPickFile = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+
+      // 1) 이미지 업로드
+      const up = await api.post("/upload/image", form, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      const imageUrl = up.data?.imageUrl;
+
+      // 2) 프로필 업서트
+      const bodyCandidates = [
+        { profileImageUrl: imageUrl },
+        { avatarUrl: imageUrl },
+        { imageUrl },
+      ];
+      let ok = false;
+      for (const b of bodyCandidates) {
+        try {
+          await api.put("/users/profile/setting", b);
+          ok = true;
+          break;
+        } catch {
+          /* try next */
+        }
       }
-    };
+      if (!ok) alert("프로필 저장 실패 (업로드는 성공)");
 
-    fetchUserProfile();
-  }, [userId]); // userId가 바뀔 때마다 프로필 정보를 다시 불러옵니다.
+      await loadMe();
+      alert("프로필 이미지가 업데이트되었습니다.");
+    } catch (e2) {
+      console.error(e2);
+      alert("이미지 업로드 실패");
+    } finally {
+      setUploading(false);
+      e.target.value = "";
+    }
+  };
 
-  // 내 프로필을 보려고 할 경우, 기존의 MyProfile 페이지로 보냅니다. (선택 사항)
-  // if (me && me.id === parseInt(userId)) {
-  //   return <Navigate to="/profile" />;
-  // }
+  if (!me) return <div className="p-6">불러오는 중...</div>;
 
-  if (isLoading) return <div className="p-8 text-center">로딩 중...</div>;
-  if (error) return <div className="p-8 text-center text-red-500">{error}</div>;
-  if (!profileData) return null;
+  const avatar =
+    me.profileImageUrl ||
+    me.avatarUrl ||
+    `https://i.pravatar.cc/150?u=${me.id}`;
 
   return (
-    <div className="container mx-auto max-w-2xl p-4">
-      {/* --- 프로필 헤더 --- */}
-      <div className="flex items-center p-4">
+    <div className="container mx-auto max-w-2xl p-4 space-y-6">
+      <div className="flex items-center gap-4">
         <img
-          src={
-            profileData.avatarUrl ||
-            `https://i.pravatar.cc/150?u=${profileData.id}`
-          }
-          alt="프로필 사진"
-          className="h-20 w-20 rounded-full object-cover md:h-32 md:w-32"
+          src={avatar}
+          alt="프로필"
+          className="h-24 w-24 rounded-full object-cover"
+          onError={(e) => (e.currentTarget.src = "https://placehold.co/96x96")}
         />
-        <div className="ml-6 flex-grow">
-          <div className="flex items-center gap-4">
-            <h2 className="text-2xl font-bold">{profileData.nickname}</h2>
-            {/* 여기에 FollowButton을 사용합니다! */}
-            <FollowButton
-              targetUserId={profileData.id} // 👈 targetUserId만 넘겨주면 알아서 작동합니다.
-            />
+        <div className="flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-2xl font-bold">
+              {me.fullName ?? me.username ?? "사용자"}
+            </h1>
+            {me.email && <span className="text-gray-500">{me.email}</span>}
           </div>
-          <div className="mt-4 flex space-x-4 text-center">
-            <div>
-              <span className="font-bold">{profileData.postCount}</span>
-              <p className="text-sm text-gray-500">게시물</p>
-            </div>
-            <div>
-              <span className="font-bold">{profileData.followerCount}</span>
-              <p className="text-sm text-gray-500">팔로워</p>
-            </div>
-            <div>
-              <span className="font-bold">{profileData.followingCount}</span>
-              <p className="text-sm text-gray-500">팔로잉</p>
-            </div>
+          <div className="mt-2 flex gap-6 text-sm text-gray-600">
+            <span>게시물 {myPostCount}</span>
+            <span>팔로워 0</span>
+            <span>팔로잉 0</span>
           </div>
-        </div>
-      </div>
-
-      {/* --- 해당 유저가 쓴 게시물 그리드 (나중에 구현) --- */}
-      <div className="border-t border-gray-200 pt-4">
-        <div className="py-8 text-center text-gray-500">
-          {profileData.nickname}님의 게시물이 여기에 표시됩니다.
+          <div className="mt-3">
+            <label className="inline-block cursor-pointer rounded-md border px-3 py-1 text-sm hover:bg-gray-50">
+              {uploading ? "업로드 중..." : "프로필 이미지 변경"}
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={onPickFile}
+                disabled={uploading}
+              />
+            </label>
+          </div>
         </div>
       </div>
     </div>
