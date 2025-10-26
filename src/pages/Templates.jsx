@@ -1,182 +1,194 @@
-import React, { useEffect, useState } from "react";
-import {
-  fetchTemplates,
-  createTemplate,
-  updateTemplate,
-  deleteTemplate,
-  applyTemplateToRoutine,
-} from "@/api/templates";
-import TemplateForm from "@/components/TemplateForm.jsx";
-import TemplateCard from "@/components/TemplateCard.jsx";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import api from "@/api/axios";
+import TemplateForm from "@/components/TemplateForm";
+import TemplateCard from "@/components/TemplateCard";
 
-export default function Templates() {
+// 배열/페이지네이션 응답 모두 수용
+function toArray(data) {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.content)) return data.content;
+  if (Array.isArray(data?.data)) return data.data;
+  if (Array.isArray(data?.items)) return data.items;
+  return [];
+}
+
+export default function Templates({ onClose }) {
   const navigate = useNavigate();
-  const [page, setPage] = useState(0);
-  const [size] = useState(12);
-  const [data, setData] = useState(null);
+
+  const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [err, setErr] = useState(null);
+  const [editing, setEditing] = useState(null); // null=닫힘, {isNew:true}=생성, {id...}=수정
+  const [applyingId, setApplyingId] = useState(null); // 변환 클릭 방지
 
-  const [showForm, setShowForm] = useState(false);
-  const [editing, setEditing] = useState(null);
-  const [submitting, setSubmitting] = useState(false);
+  const pageParams = useMemo(() => ({ page: 0, size: 50 }), []);
 
-  const load = async (p = 0) => {
-    try {
-      setLoading(true);
-      const res = await fetchTemplates(p, size);
-      setData(res.data);
-      setPage(p);
-    } catch (e) {
-      console.error(e);
-      setError("템플릿을 불러오지 못했습니다.");
-    } finally {
-      setLoading(false);
-    }
+  // 공통 새로고침
+  const refresh = async () => {
+    const res = await api.get("/routine/templates", { params: pageParams });
+    const list = toArray(res.data).map((t) => ({
+      ...t,
+      id: t.id ?? t.templateId,
+      purposeName: t.purposeName ?? t.name ?? "템플릿",
+      details: Array.isArray(t.details) ? t.details : [],
+    }));
+    setTemplates(list);
   };
 
+  // 목록 로드
   useEffect(() => {
-    load(0);
-  }, []);
+    (async () => {
+      setLoading(true);
+      setErr(null);
+      try {
+        await refresh();
+      } catch (e) {
+        console.error(e);
+        setErr("템플릿을 불러오는 중 문제가 발생했습니다.");
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [pageParams]);
 
-  const handleCreate = async (payload) => {
-    try {
-      setSubmitting(true);
-      await createTemplate(payload);
-      setShowForm(false);
-      setEditing(null);
-      await load(0);
-    } catch (e) {
-      console.error(e);
-      alert("템플릿 생성에 실패했습니다.");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleUpdate = async (id, payload) => {
-    try {
-      setSubmitting(true);
-      await updateTemplate(id, payload);
-      setShowForm(false);
-      setEditing(null);
-      await load(page);
-    } catch (e) {
-      console.error(e);
-      alert("템플릿 수정에 실패했습니다.");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleDelete = async (id) => {
+  // 생성/수정/삭제
+  async function handleCreate(payload) {
+    await api.post("/routine/templates", payload);
+    await refresh();
+  }
+  async function handleUpdate(templateId, payload) {
+    await api.put(`/routine/templates/${templateId}`, payload);
+    await refresh();
+  }
+  async function handleDelete(templateId) {
     if (!window.confirm("이 템플릿을 삭제할까요?")) return;
+    await api.delete(`/routine/templates/${templateId}`);
+    await refresh();
+  }
+
+  // 루틴 목록으로 확실히 이동
+  const goToRoutinesHard = () => {
     try {
-      await deleteTemplate(id);
-      await load(page);
-    } catch (e) {
-      console.error(e);
-      alert("템플릿 삭제에 실패했습니다.");
-    }
+      if (typeof onClose === "function") onClose();
+    } catch {}
+    window.location.assign("/routines");
   };
 
-  const handleApply = async (id) => {
+  // 템플릿 → 루틴 변환
+  async function handleApplyToRoutine(templateId) {
+    if (applyingId) return;
+    setApplyingId(templateId);
     try {
-      await applyTemplateToRoutine(id);
-      alert("루틴이 생성되었습니다.");
-      navigate("/my-routines");
+      await api.post(`/routine/templates/${templateId}/toRoutine`);
+      goToRoutinesHard();
     } catch (e) {
       console.error(e);
-      alert("루틴으로 변환에 실패했습니다.");
+      const msg =
+        e?.response?.data?.message ||
+        e?.response?.data?.error ||
+        "루틴으로 변환에 실패했습니다.";
+      alert(msg);
+    } finally {
+      setApplyingId(null);
     }
-  };
+  }
 
-  const totalPages = data?.totalPages ?? 0;
-  const content = data?.content ?? [];
+  function openCreate() {
+    setEditing({ isNew: true, purposeName: "", details: [] });
+  }
+  function startEdit(t) {
+    setEditing({
+      isNew: false,
+      id: t.id,
+      purposeName: t.purposeName,
+      details:
+        t.details?.map((d, idx) => ({
+          name: d.name ?? "",
+          orderNumber: d.orderNumber ?? idx + 1,
+          rep: d.rep ?? null,
+          set: d.set ?? null,
+          time: d.time ?? null,
+        })) ?? [],
+    });
+  }
+  function closeEditor(refreshAfter = false) {
+    setEditing(null);
+    if (refreshAfter) refresh();
+  }
+
+  if (loading) return <div className="p-6 text-center">불러오는 중...</div>;
+  if (err)
+    return (
+      <div className="p-4 text-rose-700">
+        <div className="rounded-md border border-rose-200 bg-rose-50 p-4">
+          {err}
+        </div>
+      </div>
+    );
+
+  // src/pages/Templates.jsx
+  // ...상단 import/상태/함수 부분 그대로...
 
   return (
-    <div className="mx-auto max-w-5xl p-4 sm:p-6">
-      <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold">템플릿</h1>
-        <button
-          onClick={() => {
-            setEditing(null);
-            setShowForm((v) => !v);
-          }}
-          className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-        >
-          + 새 템플릿 만들기
-        </button>
+    <div className="space-y-4">
+      {/* 헤더 */}
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-semibold">템플릿</h2>
+        <div className="flex gap-2">
+          <button
+            onClick={openCreate}
+            className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-700"
+          >
+            + 새 템플릿 만들기
+          </button>
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="rounded-md border px-3 py-1.5 text-sm"
+            >
+              닫기
+            </button>
+          )}
+        </div>
       </div>
 
-      {showForm && (
-        <div className="mb-6 rounded-lg border bg-white p-6 shadow-sm">
-          <h2 className="mb-4 text-lg font-semibold">
-            {editing ? "템플릿 수정" : "새 템플릿"}
-          </h2>
-          <TemplateForm
-            initialValue={editing}
-            submitting={submitting}
-            onCancel={() => {
-              setEditing(null);
-              setShowForm(false);
-            }}
-            onSubmit={(payload) =>
-              editing ? handleUpdate(editing.id, payload) : handleCreate(payload)
-            }
+      {/* ✅ 세로 리스트(루틴 목록처럼) */}
+      <div className="space-y-4">
+        {templates.map((t) => (
+          <TemplateCard
+            key={t.id}
+            template={t}
+            onEdit={() => startEdit(t)}
+            onDelete={() => handleDelete(t.id)}
+            onApply={() => handleApplyToRoutine(t.id)}
+            onApplyToRoutine={() => handleApplyToRoutine(t.id)}
+            applying={applyingId === t.id}
+            className="w-full min-h-[220px]" // ✅ 동일 크기
           />
-        </div>
-      )}
+        ))}
 
-      {loading ? (
-        <div className="p-12 text-center text-gray-500">불러오는 중...</div>
-      ) : error ? (
-        <div className="p-12 text-center text-red-600">{error}</div>
-      ) : content.length === 0 ? (
-        <div className="rounded-lg border bg-white p-12 text-center text-gray-600">
-          아직 저장된 템플릿이 없습니다.
-        </div>
-      ) : (
-        <>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {content.map((tpl) => (
-              <TemplateCard
-                key={tpl.id}
-                template={tpl}
-                onEdit={() => {
-                  setEditing(tpl);
-                  setShowForm(true);
-                }}
-                onDelete={() => handleDelete(tpl.id)}
-                onApplyToRoutine={() => handleApply(tpl.id)}
-              />
-            ))}
+        {templates.length === 0 && (
+          <div className="rounded-lg border border-gray-200 p-6 text-center text-gray-500">
+            템플릿이 없습니다. “새 템플릿 만들기”로 추가해 보세요.
           </div>
+        )}
+      </div>
 
-          {totalPages > 1 && (
-            <div className="mt-6 flex items-center justify-center gap-2">
-              <button
-                disabled={page <= 0}
-                className="rounded-md border px-3 py-1 text-sm disabled:text-gray-400"
-                onClick={() => load(page - 1)}
-              >
-                이전
-              </button>
-              <span className="text-sm text-gray-600">
-                {page + 1} / {totalPages}
-              </span>
-              <button
-                disabled={page >= totalPages - 1}
-                className="rounded-md border px-3 py-1 text-sm disabled:text-gray-400"
-                onClick={() => load(page + 1)}
-              >
-                다음
-              </button>
-            </div>
-          )}
-        </>
-      )}
+      {/* 생성/수정 폼 모달 */}
+      <TemplateForm
+        open={!!editing}
+        initialValue={editing || undefined}
+        onClose={() => closeEditor(false)}
+        onSubmit={async (formValue) => {
+          if (editing?.isNew) {
+            await handleCreate(formValue);
+          } else if (editing?.id) {
+            await handleUpdate(editing.id, formValue);
+          }
+          closeEditor(true);
+        }}
+      />
     </div>
   );
 }

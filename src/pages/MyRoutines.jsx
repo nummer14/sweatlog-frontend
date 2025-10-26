@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import api from "@/api/axios";
 import Templates from "@/pages/Templates";
+import { PlusCircle } from "lucide-react";
 
 function toArray(data) {
   if (Array.isArray(data)) return data;
@@ -23,6 +24,7 @@ export default function MyRoutines() {
       setLoading(true);
       setError(null);
       try {
+        // 여러 후보 엔드포인트 시도
         let res = await api.get("/routine").catch(() => null);
         if (!res) res = await api.get("/routines").catch(() => null);
         if (!res) res = await api.get("/routines/me").catch(() => null);
@@ -32,9 +34,11 @@ export default function MyRoutines() {
           ...r,
           id: r.id ?? r.routineId,
           routineName: r.routineName ?? r.name ?? r.title ?? "루틴",
-          exerciseCount: r.exerciseCount ?? (Array.isArray(r.details) ? r.details.length : 0),
+          details: Array.isArray(r.details) ? r.details : [],
+          exerciseCount:
+            r.exerciseCount ??
+            (Array.isArray(r.details) ? r.details.length : 0),
         }));
-
         setRoutines(normalized);
       } catch (err) {
         console.error("루틴 목록을 불러오는 데 실패:", err);
@@ -59,7 +63,13 @@ export default function MyRoutines() {
     }
   };
 
-  if (loading) return <div className="p-8 text-center">루틴 목록을 불러오는 중...</div>;
+  const goDetail = (routine) => {
+    // state로 목록 아이템을 같이 넘겨서 첫 렌더 빠르게
+    navigate(`/routines/${routine.id}`, { state: routine });
+  };
+
+  if (loading)
+    return <div className="p-8 text-center">루틴 목록을 불러오는 중...</div>;
 
   if (error)
     return (
@@ -84,9 +94,9 @@ export default function MyRoutines() {
             </button>
             <Link
               to="/routines/new"
-              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white"
+              className="flex items-center gap-2 rounded-md bg-brand-primary px-4 py-2 text-sm font-semibold text-white hover:bg-brand-primary-dark"
             >
-              + 새 루틴 만들기
+              <PlusCircle size={16} /> 새 루틴 만들기
             </Link>
           </div>
         </div>
@@ -94,13 +104,24 @@ export default function MyRoutines() {
         <div className="mt-6 space-y-4">
           {routines.length > 0 ? (
             routines.map((routine) => (
-              <div key={routine.id ?? Math.random()} className="rounded-lg border p-4">
+              <div
+                key={routine.id ?? Math.random()}
+                className="rounded-lg border p-4 hover:bg-gray-50 cursor-pointer"
+                onClick={() => goDetail(routine)}
+              >
                 <div className="flex items-center justify-between">
                   <div>
-                    <h2 className="text-lg font-semibold">{routine.routineName}</h2>
-                    <p className="text-sm text-gray-500">{routine.exerciseCount ?? 0}개의 운동</p>
+                    <h2 className="text-lg font-semibold">
+                      {routine.routineName}
+                    </h2>
+                    <p className="text-sm text-gray-500">
+                      {routine.exerciseCount ?? 0}개의 운동
+                    </p>
                   </div>
-                  <div className="flex gap-4">
+                  <div
+                    className="flex gap-4"
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     <button
                       onClick={() => navigate(`/routines/edit/${routine.id}`)}
                       className="text-sm font-semibold text-blue-600 hover:text-blue-500"
@@ -126,7 +147,9 @@ export default function MyRoutines() {
         </div>
       </div>
 
-      {showTemplates && <TemplatesDrawer onClose={() => setShowTemplates(false)} />}
+      {showTemplates && (
+        <TemplatesDrawer onClose={() => setShowTemplates(false)} />
+      )}
     </>
   );
 }
@@ -138,7 +161,10 @@ function TemplatesDrawer({ onClose }) {
       <div className="absolute right-0 top-0 h-full w-full max-w-2xl bg-white shadow-xl">
         <div className="flex items-center justify-between border-b p-4">
           <h2 className="text-lg font-semibold">템플릿</h2>
-          <button onClick={onClose} className="rounded-md border px-3 py-1 text-sm">
+          <button
+            onClick={onClose}
+            className="rounded-md border px-3 py-1 text-sm"
+          >
             닫기
           </button>
         </div>

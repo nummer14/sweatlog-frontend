@@ -1,86 +1,101 @@
+// src/components/GoalSettingModal.jsx
 import React, { useState } from "react";
-import Modal from "./Modal"; // 우리가 이미 만들어 둔 Modal 컴포넌트를 재사용합니다.
+import Modal from "./Modal";
+import { createGoal } from "@/api/goalsApi"; // ✨ API 함수 import
 
-// 이 컴포넌트는 3개의 props를 받습니다:
-// - isOpen: 모달이 열려있는지 여부
-// - onClose: 모달을 닫는 함수
-// - onAddGoal: 새로 만든 목표 데이터를 부모(MyProfile)에게 전달하는 함수
-export default function GoalSettingModal({ isOpen, onClose, onAddGoal }) {
-  // 폼의 초기 상태
-  const initialState = {
-    type: "체중 감량",
-    targetValue: "",
-    unit: "kg",
-    exerciseName: "", // 근력 향상 목표를 위한 필드
-  };
+const today = () => new Date().toISOString().slice(0, 10);
+const oneYearLater = () => {
+  const d = new Date();
+  d.setFullYear(d.getFullYear() + 1);
+  return d.toISOString().slice(0, 10);
+};
 
-  const [goalData, setGoalData] = useState(initialState);
+export default function GoalSettingModal({ isOpen, onClose, onGoalAdded }) {
+  const [type, setType] = useState("WEIGHT");
+  const [targetValue, setTargetValue] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
-  // 폼 내용이 바뀔 때마다 상태를 업데이트하는 함수
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    const newGoalData = { ...goalData, [name]: value };
-
-    // 목표 종류에 따라 단위를 자동으로 바꿔줍니다. (UX 개선)
-    if (name === "type") {
-      if (value === "체중 감량" || value === "근력 향상") newGoalData.unit = "kg";
-      else if (value === "지구력 향상") newGoalData.unit = "km";
-      else if (value === "운동 빈도") newGoalData.unit = "회";
-    }
-
-    setGoalData(newGoalData);
-  };
-
-  // '목표 추가' 버튼을 눌렀을 때 실행될 함수
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!goalData.targetValue) {
-      alert("목표 수치를 입력해주세요.");
-      return;
+    if (!targetValue.trim()) return alert("목표 수치를 입력해주세요.");
+
+    // ✅ 백엔드 GoalCreateRequest DTO에 맞게 payload 구성
+    const payload = {
+      type,
+      startDt: today(),
+      endDt: oneYearLater(), // 1년 뒤로 기본 설정
+      status: "ACTIVE",
+    };
+
+    switch (type) {
+      case "WEIGHT":
+        payload.targetWeightKg = Number(targetValue);
+        break;
+      case "FREQUENCY":
+        payload.targetSessionsPerWeek = Number(targetValue);
+        break;
+      // 참고: 다른 GoalType(STRENGTH, ENDURANCE 등)을 추가하려면 case를 확장하면 됩니다.
+      default:
+        alert("지원하지 않는 목표 유형입니다.");
+        return;
     }
-    // 부모에게 완성된 목표 데이터를 전달합니다.
-    onAddGoal({
-      id: Date.now(), // 고유 ID 생성
-      ...goalData,
-    });
-    setGoalData(initialState); // 폼을 초기화합니다.
-    onClose(); // 모달을 닫습니다.
+
+    setSubmitting(true);
+    try {
+      const response = await createGoal(payload);
+      console.log("새 목표 생성 성공:", response.data);
+      alert("새로운 목표가 추가되었습니다!");
+      onGoalAdded(); // 부모 컴포넌트에 목표 추가 사실을 알림 (목록 새로고침용)
+      onClose();
+      setTargetValue(""); // 입력 필드 초기화
+    } catch (err) {
+      console.error("목표 생성 실패:", err);
+      alert(err.response?.data?.message || "목표 생성에 실패했습니다.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
     <Modal isOpen={isOpen} onClose={onClose}>
       <form onSubmit={handleSubmit} className="space-y-4">
         <h2 className="text-xl font-bold">새 목표 설정</h2>
-
         <div>
-          <label htmlFor="type" className="block text-sm font-medium text-gray-700">목표 종류</label>
-          <select id="type" name="type" value={goalData.type} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300">
-            <option>체중 감량</option>
-            <option>근력 향상</option>
-            <option>지구력 향상</option>
-            <option>운동 빈도</option>
+          <label htmlFor="type" className="block text-sm font-medium">
+            목표 종류
+          </label>
+          <select
+            id="type"
+            value={type}
+            onChange={(e) => setType(e.target.value)}
+            className="mt-1 block w-full rounded-md border-gray-300"
+          >
+            <option value="WEIGHT">체중 감량/증량 (kg)</option>
+            <option value="FREQUENCY">운동 빈도 (주 n회)</option>
           </select>
         </div>
-
-        {/* 목표 종류가 '근력 향상'일 때만 운동 이름 입력창을 보여줍니다. */}
-        {goalData.type === "근력 향상" && (
-          <div>
-            <label htmlFor="exerciseName" className="block text-sm font-medium text-gray-700">운동 이름</label>
-            <input type="text" id="exerciseName" name="exerciseName" value={goalData.exerciseName} onChange={handleChange} placeholder="예: 벤치프레스" className="mt-1 block w-full rounded-md border-gray-300"/>
-          </div>
-        )}
-
-        <div className="flex items-end gap-2">
-          <div className="flex-grow">
-            <label htmlFor="targetValue" className="block text-sm font-medium text-gray-700">목표 수치</label>
-            <input type="number" id="targetValue" name="targetValue" value={goalData.targetValue} onChange={handleChange} className="mt-1 block w-full rounded-md border-gray-300"/>
-          </div>
-          <span className="pb-2 font-medium">{goalData.unit}</span>
+        <div>
+          <label htmlFor="targetValue" className="block text-sm font-medium">
+            목표 수치
+          </label>
+          <input
+            type="number"
+            id="targetValue"
+            value={targetValue}
+            onChange={(e) => setTargetValue(e.target.value)}
+            className="mt-1 block w-full rounded-md border-gray-300"
+            placeholder={
+              type === "WEIGHT" ? "예: 70" : "예: 3"
+            }
+          />
         </div>
-
         <div className="text-right">
-          <button type="submit" className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white">
-            목표 추가
+          <button
+            type="submit"
+            disabled={submitting}
+            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+          >
+            {submitting ? "추가 중..." : "목표 추가"}
           </button>
         </div>
       </form>

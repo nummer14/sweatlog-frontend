@@ -1,12 +1,13 @@
-/* 1. Google Fonts에서 Pretendard와 Quicksand 폰트를 함께 가져옵니다. */
-/* Quicksand 폰트를 다양한 굵기와 함께 가져옵니다. */
-@import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;700&display=swap');
-
+/* src/index.css */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* body의 기본 폰트를 Quicksand로 명확하게 지정합니다. */
-body {
-  font-family: 'Quicksand', sans-serif;
+@layer base {
+  body {
+    @apply bg-brand-gray text-gray-800;
+  }
+  button, [role="button"], a {
+    @apply transition-colors duration-200;
+  }
 }

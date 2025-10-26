@@ -1,92 +1,56 @@
+// src/pages/SocialFeed.jsx
 import React, { useEffect, useState } from "react";
 import PostCard from "@/components/PostCard";
 import api from "@/api/axios";
-
-// PageImpl/배열 모두 수용 + user/author 정규화
-function normalizePosts(raw) {
-  const list = Array.isArray(raw?.content)
-    ? raw.content
-    : Array.isArray(raw)
-    ? raw
-    : [];
-
-  return list.map((p) => {
-    const u = p.user ?? p.author ?? undefined;
-    const author =
-      p.author ??
-      (u
-        ? {
-            id: u.id,
-            nickname: u.nickname ?? u.fullName ?? u.username ?? "사용자",
-            avatarUrl: u.avatarUrl ?? u.profileImageUrl ?? null,
-          }
-        : undefined);
-
-    return {
-      ...p,
-      author,
-      id:
-        p.id ??
-        p.postId ??
-        (u?.id
-          ? `${u.id}-${p.date ?? ""}-${p.startTime ?? ""}`
-          : `tmp-${Math.random().toString(36).slice(2)}`),
-    };
-  });
-}
+import useAuthStore from "@/store/authStore";
 
 export default function SocialFeed() {
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const { user: me, setFollowing } = useAuthStore();
 
   useEffect(() => {
-    (async () => {
+    const loadInitialData = async () => {
       setLoading(true);
-      setError(null);
       try {
-        const res = await api.get("/posts?page=0&size=20");
-        setPosts(normalizePosts(res.data));
+        console.log("--- 🔄 SocialFeed 데이터 로드 시작 ---");
+        const [postsRes, followingRes] = await Promise.all([
+          api.get("/posts?page=0&size=20"),
+          me?.id ? api.get(`/users/${me.id}/following`, { params: { size: 2000 }}) : Promise.resolve({ data: { content: [] } })
+        ]);
+
+        console.log("📥 받아온 게시물 데이터:", postsRes.data); // 진단 로그
+        console.log("📥 받아온 팔로잉 데이터:", followingRes.data); // 진단 로그
+
+        const normalizedPosts = (postsRes.data?.content || []).map(p => {
+            const user = p.user || p.author || {};
+            return { ...p, author: user };
+        });
+
+        setPosts(normalizedPosts);
+        
+        const followingIds = (followingRes.data?.content || []).map(user => user.id);
+        setFollowing(followingIds);
+
       } catch (e) {
-        console.error(e);
-        setError("피드를 불러오는 중 문제가 발생했습니다.");
+        console.error("피드 로딩 에러:", e);
       } finally {
         setLoading(false);
+        console.log("--- ✅ SocialFeed 데이터 로드 완료 ---");
       }
-    })();
-  }, []);
+    };
+    
+    loadInitialData();
+  }, [me, setFollowing]);
 
-  if (loading) {
-    return (
-      <div className="container mx-auto max-w-xl space-y-4 p-4">
-        <div className="h-24 animate-pulse rounded-lg bg-gray-100" />
-        <div className="h-64 animate-pulse rounded-lg bg-gray-100" />
-        <div className="h-24 animate-pulse rounded-lg bg-gray-100" />
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="container mx-auto max-w-xl p-4">
-        <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-rose-700">
-          {error}
-        </div>
-      </div>
-    );
-  }
+  if (loading) { /* ... */ }
 
   return (
     <div className="container mx-auto max-w-xl space-y-6 p-4">
       <h1 className="text-3xl font-bold">피드</h1>
-
-      {posts.length > 0 ? (
-        posts.map((post) => <PostCard key={post.id} post={post} />)
-      ) : (
-        <div className="py-8 text-center text-gray-500">
-          아직 게시물이 없습니다. 첫 번째 운동 기록을 남겨보세요!
-        </div>
-      )}
+      {posts.map((post) => (
+        <PostCard key={post.id} post={post} />
+      ))}
     </div>
   );
 }

@@ -1,175 +1,309 @@
-import React, { useEffect, useState, useRef } from "react";
+// src/pages/MyProfile.jsx
+
+import React, { useEffect, useState, useCallback, useRef } from "react";
+import { Link } from "react-router-dom";
 import api from "@/api/axios";
+import ProfileEditModal from "@/components/ProfileEditModal";
+import FollowListModal from "@/components/FollowListModal";
 import useAuthStore from "@/store/authStore";
-import { Camera } from "lucide-react"; // 아이콘 라이브러리 (없으면 npm install lucide-react)
+import { Edit, BarChart2 } from "lucide-react";
+
+const LABELS = {
+  experienceLevel: {
+    NEWBIE: "입문",
+    BEGINNER: "초급",
+    INTERMEDIATE: "중급",
+    ADVANCED: "고급",
+  },
+  activityLevel: {
+    NONE: "거의 안 함",
+    LIGHT: "가볍게 (주 1-2회)",
+    NORMAL: "보통 (주 3-4회)",
+    ACTIVE: "활동적 (주 5-6회)",
+    INTENSE: "매우 활동적 (매일)",
+  },
+  gender: { MALE: "남성", FEMALE: "여성" },
+};
 
 export default function MyProfile() {
-  // Zustand 스토어에서 user 정보와 login 함수(업데이트용)를 가져옵니다.
-  const { user: authUser, login } = useAuthStore();
+  // 1. profile 상태를 제거하고, authUser를 모든 정보의 기준으로 삼습니다.
+  const { user: authUser, login, accessToken } = useAuthStore();
 
-  const [profile, setProfile] = useState(null);
-  const [myPosts, setMyPosts] = useState([]);
-  const [goals, setGoals] = useState([]);
+  const [followInfo, setFollowInfo] = useState({
+    followersCount: 0,
+    followingCount: 0,
+  });
+  const [postCount, setPostCount] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [isUploading, setIsUploading] = useState(false);
-  const [errMsg, setErrMsg] = useState(null);
-
-  // 숨겨진 파일 input에 접근하기 위한 ref
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingProfile, setEditingProfile] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isFollowModalOpen, setIsFollowModalOpen] = useState({
+    isOpen: false,
+    type: "followers",
+  });
   const fileInputRef = useRef(null);
+  const [isUploading, setIsUploading] = useState(false);
+
+  // 2. 서버에서는 팔로워, 게시물 수 같은 '추가' 정보만 불러옵니다.
+  const loadExtraData = useCallback(async () => {
+    if (!authUser?.id) {
+      setLoading(false);
+      return;
+    }
+    try {
+      const [followStatusRes, postsRes] = await Promise.all([
+        api.get(`/users/${authUser.id}/follow-status`),
+        api.get(`/posts/user/${authUser.id}`, { params: { size: 1 } }),
+      ]);
+      setFollowInfo(followStatusRes.data);
+      setPostCount(postsRes.data?.totalElements || 0);
+    } catch (err) {
+      console.error("추가 데이터 로딩 실패:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, [authUser]);
 
   useEffect(() => {
-    const fetchProfileData = async () => {
-      try {
-        // 1) 현재 사용자 정보 (/users/me)
-        const meRes = await api.get("/users/me");
-        const me = meRes.data;
-        setProfile(me);
+    setLoading(true);
+    loadExtraData();
+  }, [loadExtraData]);
 
-        // 2) 내 게시물 + 내 목표
-        const [postsRes, goalsRes] = await Promise.all([
-          api.get(`/posts/user/${me.id}?page=0&size=20`),
-          api.get("/users/profile/goals"),
-        ]);
-        setMyPosts(postsRes?.data?.content ?? postsRes?.data ?? []);
-        setGoals(goalsRes?.data ?? []);
-      } catch (err) {
-        console.error("프로필 데이터를 불러오는 데 실패했습니다:", err);
-        setErrMsg("데이터를 불러올 수 없습니다. 잠시 후 다시 시도해주세요.");
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchProfileData();
-  }, []);
+  const openEditModal = () => {
+    setEditingProfile({ ...authUser }); // 수정 창을 열 때, authUser의 현재 정보를 복사
+    setIsEditModalOpen(true);
+  };
 
-  // 프로필 이미지 변경 핸들러
-  const handleFileChange = async (event) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    setIsUploading(true);
-    const formData = new FormData();
-    // 백엔드에서 받는 key 이름이 'file' 또는 'image'일 수 있습니다. 확인이 필요합니다.
-    formData.append('file', file);
-
+  // 3. '저장' 버튼을 누르면, 서버 DB를 업데이트하고, 성공하면 authUser 상태를 직접 업데이트합니다.
+  const handleProfileSubmit = async () => {
+    if (!editingProfile?.fullName?.trim()) {
+      return alert("이름은 필수 항목입니다.");
+    }
+    setIsSubmitting(true);
     try {
-      // Step 1: 이미지 업로드 API 호출 (2번 코드 참고)
-      const uploadRes = await api.post("/upload/image", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-      const imageUrl = uploadRes.data?.imageUrl;
+      const payload = {
+        ...editingProfile,
+        heightCm: editingProfile.heightCm
+          ? parseInt(editingProfile.heightCm, 10)
+          : null,
+        weightKg: editingProfile.weightKg
+          ? Number(editingProfile.weightKg)
+          : null,
+        experienceLevel: editingProfile.experienceLevel || "NEWBIE",
+        activityLevel: editingProfile.activityLevel || "NONE",
+        preferredWorkoutIds:
+          editingProfile.preferredWorkoutIds &&
+          editingProfile.preferredWorkoutIds.length > 0
+            ? editingProfile.preferredWorkoutIds
+            : [1],
+      };
 
-      if (!imageUrl) {
-        throw new Error("이미지 URL을 받지 못했습니다.");
-      }
-      
-      // Step 2: 업로드된 URL로 프로필 정보 업데이트 API 호출
-      const payload = { ...(profile || {}), profileImageUrl: imageUrl };
       await api.put("/users/profile/setting", payload);
 
-      // Step 3: 프론트엔드 상태 실시간 업데이트
-      setProfile((p) => ({ ...(p || {}), profileImageUrl: imageUrl }));
-      
-      // (선택사항이지만 강력 추천) Zustand 스토어의 user 정보도 업데이트
-      // 이렇게 하면 Header 등 다른 곳의 프로필 이미지도 즉시 바뀝니다.
-      login({ ...authUser, profileImageUrl: imageUrl }, useAuthStore.getState().accessToken);
-      
-      alert("프로필 이미지가 성공적으로 변경되었습니다.");
+      // 서버에서 다시 불러오는 대신, 내가 수정한 내용으로 authUser를 직접 업데이트!
+      // 이것이 화면을 즉시, 그리고 영구적으로 바꾸는 핵심입니다.
+      login(editingProfile, accessToken);
 
-    } catch (err) {
-      console.error("프로필 이미지 업데이트 실패:", err);
-      alert("이미지 업로드 또는 프로필 업데이트에 실패했습니다.");
+      alert("프로필이 수정되었습니다.");
+      setIsEditModalOpen(false);
+    } catch (error) {
+      console.error("프로필 수정 실패:", error.response?.data || error);
+      alert(error.response?.data?.message || "프로필 수정에 실패했습니다.");
     } finally {
-      setIsUploading(false);
-      // 같은 파일을 다시 업로드할 수 있도록 input 값을 초기화합니다.
-      if(fileInputRef.current) fileInputRef.current.value = "";
+      setIsSubmitting(false);
     }
   };
 
-  if (loading) return <div className="p-6 text-center">프로필을 불러오는 중…</div>;
-  if (errMsg) return <div className="p-6 text-center text-red-600">{errMsg}</div>;
-  if (!profile) return <div className="p-6 text-center">프로필 정보를 찾을 수 없습니다.</div>;
+  const handleFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploading(true);
+    const formData = new FormData();
+    formData.append("file", file);
+    try {
+      const uploadRes = await api.post("/upload/image", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      const imageUrl = uploadRes.data.imageUrl;
+      const currentProfileData = authUser || {};
+      const payload = {
+        ...currentProfileData,
+        profileImageUrl: imageUrl,
+        experienceLevel: currentProfileData.experienceLevel || "NEWBIE",
+        activityLevel: currentProfileData.activityLevel || "NONE",
+        preferredWorkoutIds: currentProfileData.preferredWorkoutIds || [1],
+      };
+      await api.put("/users/profile/setting", payload);
 
+      // 사진 변경 성공 시에도 authUser 상태를 직접 업데이트
+      login({ ...authUser, profileImageUrl: imageUrl }, accessToken);
+
+      alert("프로필 사진이 변경되었습니다.");
+    } catch (err) {
+      console.error("프로필 사진 변경 실패:", err);
+      alert("사진 변경에 실패했습니다.");
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const openFollowModal = (type) =>
+    setIsFollowModalOpen({ isOpen: true, type });
+  const closeFollowModal = () =>
+    setIsFollowModalOpen({ isOpen: false, type: "followers" });
+
+  if (loading)
+    return <div className="p-6 text-center">프로필을 불러오는 중...</div>;
+  if (!authUser)
+    return <div className="p-6 text-center">로그인 정보가 없습니다.</div>;
+
+  // 4. 화면의 모든 부분에서 profile 대신 authUser를 사용합니다.
   return (
-    <div className="container mx-auto max-w-4xl p-4">
-      {/* 숨겨진 파일 input */}
-      <input 
-        type="file" 
-        ref={fileInputRef} 
-        onChange={handleFileChange} 
-        accept="image/*" 
-        className="hidden" 
-        disabled={isUploading}
-      />
+    <div className="container mx-auto max-w-3xl p-4 space-y-6 bg-gray-50 min-h-screen">
+      <div className="flex justify-between items-center">
+        <h1 className="text-3xl font-bold">내 프로필</h1>
+        <button
+          onClick={openEditModal}
+          className="flex items-center gap-2 rounded-md border bg-white px-3 py-2 text-sm font-semibold hover:bg-gray-100"
+        >
+          <Edit size={16} /> 프로필 수정
+        </button>
+      </div>
 
-      {/* --- 프로필 헤더 --- */}
-      <header className="flex items-center gap-8 p-6 mb-8 bg-white rounded-lg shadow-sm">
-        {/* 프로필 이미지 섹션 */}
-        <div className="flex-shrink-0 w-32 h-32">
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isUploading}
-            className="relative w-full h-full rounded-full group cursor-pointer"
-          >
+      <div className="rounded-lg border bg-white p-6 shadow-sm">
+        <div className="flex items-center gap-6">
+          <div className="relative group shrink-0">
             <img
-              src={profile.profileImageUrl || `https://ui-avatars.com/api/?name=${profile.username}&background=random&size=128`}
+              src={
+                authUser.profileImageUrl ||
+                `https://i.pravatar.cc/150?u=${authUser.id}`
+              }
               alt="프로필"
-              className="w-full h-full object-cover rounded-full border-2 border-gray-200"
+              className="h-24 w-24 rounded-full object-cover bg-gray-200"
             />
-            {/* 마우스 올리면 나타나는 카메라 아이콘 */}
-            <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 rounded-full flex items-center justify-center transition-opacity">
-              <Camera className="w-10 h-10 text-white opacity-0 group-hover:opacity-100" />
-            </div>
-            {/* 업로드 중일 때 로딩 스피너 */}
-            {isUploading && (
-              <div className="absolute inset-0 bg-white bg-opacity-70 rounded-full flex items-center justify-center">
-                <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-              </div>
-            )}
-          </button>
-        </div>
-
-        {/* 프로필 정보 섹션 */}
-        <section className="flex-grow space-y-3">
-          <h1 className="text-3xl font-bold">{profile.fullName || profile.username}</h1>
-          <p className="text-gray-600">{profile.email}</p>
-          <div className="flex gap-6 text-md">
-            <span>게시물 <span className="font-semibold">{myPosts.length}</span></span>
-            <span>목표 <span className="font-semibold">{goals.length}</span></span>
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              className="hidden"
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isUploading}
+              className="absolute inset-0 bg-black bg-opacity-40 rounded-full flex items-center justify-center text-white text-xs font-semibold opacity-0 group-hover:opacity-100 cursor-pointer"
+            >
+              {isUploading ? "업로드중..." : "변경"}
+            </button>
           </div>
-        </section>
-      </header>
-
-      {/* --- 나의 목표 --- */}
-      <div className="rounded-lg border p-4 mb-6 bg-white">
-        <h2 className="mb-3 text-xl font-semibold">나의 목표</h2>
-        {goals.length > 0 ? (
-          <ul className="list-disc pl-5 space-y-1">
-            {goals.map((g) => (
-              <li key={g.id}>{g.title || g.name}</li>
-            ))}
-          </ul>
-        ) : <p className="text-gray-500">아직 설정된 목표가 없습니다.</p>}
+          <div className="flex-1">
+            <h2 className="text-2xl font-bold">
+              {authUser.fullName || authUser.username}
+            </h2>
+            <div className="mt-3 flex gap-6 text-sm">
+              <Link to="/my-posts" className="text-center hover:underline">
+                <span className="font-semibold">{postCount}</span>
+                <br />
+                <span className="font-normal text-gray-500">게시물</span>
+              </Link>
+              <button
+                onClick={() => openFollowModal("followers")}
+                className="text-center hover:underline"
+              >
+                <span className="font-semibold">
+                  {followInfo.followersCount}
+                </span>
+                <br />
+                <span className="font-normal text-gray-500">팔로워</span>
+              </button>
+              <button
+                onClick={() => openFollowModal("following")}
+                className="text-center hover:underline"
+              >
+                <span className="font-semibold">
+                  {followInfo.followingCount}
+                </span>
+                <br />
+                <span className="font-normal text-gray-500">팔로잉</span>
+              </button>
+            </div>
+          </div>
+        </div>
+        <p className="mt-4 text-sm text-gray-700 border-t pt-4">
+          {authUser.bio || "자기소개를 입력해주세요."}
+        </p>
       </div>
 
-      {/* --- 나의 게시물 --- */}
-      <div className="rounded-lg border p-4 bg-white">
-        <h2 className="mb-3 text-xl font-semibold">나의 게시물</h2>
-        {myPosts.length > 0 ? (
-          <ul className="space-y-3">
-            {myPosts.map((p) => (
-              <li key={p.id} className="rounded border p-3 hover:shadow-md transition-shadow">
-                <div className="font-medium">
-                  {p.memo || p.title || `(내용 없음)`}
-                </div>
-                <div className="text-sm text-gray-500 mt-1">
-                  {p.date} {p.startTime}~{p.endTime}
-                </div>
-              </li>
-            ))}
-          </ul>
-        ) : <p className="text-gray-500">아직 작성한 게시물이 없습니다.</p>}
+      <div className="rounded-lg border bg-white p-6 shadow-sm">
+        <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+          <BarChart2 size={20} /> 나의 운동 통계
+        </h3>
+        <div className="text-center py-8 text-gray-400">
+          <p>(추후 이 곳에 운동 기록을 분석한 차트가 표시될 예정입니다)</p>
+        </div>
       </div>
+
+      <div className="rounded-lg border bg-white p-6 shadow-sm">
+        <h3 className="text-lg font-semibold mb-4">상세 정보</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4 text-sm">
+          <div className="flex justify-between border-b py-2">
+            <span className="text-gray-500">키</span>
+            <span className="font-medium">
+              {authUser.heightCm ? `${authUser.heightCm} cm` : "미입력"}
+            </span>
+          </div>
+          <div className="flex justify-between border-b py-2">
+            <span className="text-gray-500">몸무게</span>
+            <span className="font-medium">
+              {authUser.weightKg ? `${authUser.weightKg} kg` : "미입력"}
+            </span>
+          </div>
+          <div className="flex justify-between border-b py-2">
+            <span className="text-gray-500">성별</span>
+            <span className="font-medium">
+              {authUser.gender ? LABELS.gender[authUser.gender] : "미입력"}
+            </span>
+          </div>
+          <div className="flex justify-between border-b py-2">
+            <span className="text-gray-500">생년월일</span>
+            <span className="font-medium">
+              {authUser.birthDate || "미입력"}
+            </span>
+          </div>
+          <div className="flex justify-between border-b py-2 sm:col-span-2">
+            <span className="text-gray-500">운동 경력</span>
+            <span className="font-medium">
+              {authUser.experienceLevel
+                ? LABELS.experienceLevel[authUser.experienceLevel]
+                : "미입력"}
+            </span>
+          </div>
+          <div className="flex justify-between border-b py-2 sm:col-span-2">
+            <span className="text-gray-500">활동 수준</span>
+            <span className="font-medium">
+              {authUser.activityLevel
+                ? LABELS.activityLevel[authUser.activityLevel]
+                : "미입력"}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <ProfileEditModal
+        isOpen={isEditModalOpen}
+        onClose={() => setIsEditModalOpen(false)}
+        formData={editingProfile}
+        setFormData={setEditingProfile}
+        onSubmit={handleProfileSubmit}
+        submitting={isSubmitting}
+      />
+      <FollowListModal
+        isOpen={isFollowModalOpen.isOpen}
+        onClose={closeFollowModal}
+        userId={authUser?.id}
+        type={isFollowModalOpen.type}
+      />
     </div>
   );
 }

@@ -2,50 +2,33 @@ import React, { useEffect, useState } from "react";
 import { useParams, useLocation, Link } from "react-router-dom";
 import api from "@/api/axios";
 
-function toArray(data) {
-  if (Array.isArray(data)) return data;
-  if (Array.isArray(data?.content)) return data.content;
-  return [];
-}
-
 export default function RoutineDetail() {
-  const { id } = useParams();
+  const params = useParams();
+  // ✅ 콜론(:) 뒤에 붙은 꼬리 제거
+  const id = String(params.id ?? "").split(":")[0];
   const { state } = useLocation();
 
-  const [routine, setRoutine] = useState(null);
+  const [routine, setRoutine] = useState(state || null);
   const [loading, setLoading] = useState(!state);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    // 1) 목록에서 state로 넘어온 경우 바로 사용
-    if (state) {
-      const r = state;
-      setRoutine({
-        ...r,
-        id: r.id ?? r.routineId,
-        routineName: r.routineName ?? r.name ?? "루틴",
-        details: Array.isArray(r.details) ? r.details : [],
-      });
-      return;
-    }
-
-    // 2) state가 없으면 목록을 크게 받아서 찾아보기
+    if (state) return;
     (async () => {
       setLoading(true);
       setError(null);
       try {
-        const res = await api.get("/routine", {
-          params: { page: 0, size: 1000 },
-        });
-        const found = toArray(res.data).find(
-          (r) => String(r.id ?? r.routineId) === String(id)
-        );
-        if (!found) throw new Error("루틴을 찾을 수 없습니다.");
+        let res = await api.get(`/routine/${id}`).catch(() => null);
+        if (!res) res = await api.get(`/routines/${id}`).catch(() => null);
+
+        const data = res?.data;
+        if (!data) throw new Error("루틴을 찾을 수 없습니다.");
+
         setRoutine({
-          ...found,
-          id: found.id ?? found.routineId,
-          routineName: found.routineName ?? found.name ?? "루틴",
-          details: Array.isArray(found.details) ? found.details : [],
+          ...data,
+          id: data.id ?? data.routineId,
+          routineName: data.routineName ?? data.name ?? "루틴",
+          details: Array.isArray(data.details) ? data.details : [],
         });
       } catch (e) {
         console.error(e);
@@ -66,6 +49,8 @@ export default function RoutineDetail() {
       </div>
     );
   if (!routine) return null;
+
+  const hasAnyTime = routine.details?.some((d) => d?.time != null);
 
   return (
     <div className="container mx-auto max-w-2xl p-4 space-y-6">
@@ -92,24 +77,18 @@ export default function RoutineDetail() {
           <thead className="bg-gray-50">
             <tr>
               <th className="px-3 py-2">운동</th>
-              <th className="px-3 py-2">무게</th>
-              <th className="px-3 py-2">횟수</th>
-              <th className="px-3 py-2">세트</th>
-              {"duration" in (routine.details?.[0] ?? {}) && (
-                <th className="px-3 py-2">시간(분)</th>
-              )}
+              <th className="px-3 py-2">횟수(rep)</th>
+              <th className="px-3 py-2">세트(set)</th>
+              {hasAnyTime && <th className="px-3 py-2">시간(분)</th>}
             </tr>
           </thead>
           <tbody>
-            {routine.details.map((d, i) => (
+            {(routine.details ?? []).map((d, i) => (
               <tr key={`d-${i}`} className="border-t">
-                <td className="px-3 py-2">{d.name ?? "-"}</td>
-                <td className="px-3 py-2">{d.weight ?? "-"}</td>
-                <td className="px-3 py-2">{d.reps ?? "-"}</td>
-                <td className="px-3 py-2">{d.sets ?? "-"}</td>
-                {"duration" in d && (
-                  <td className="px-3 py-2">{d.duration ?? "-"}</td>
-                )}
+                <td className="px-3 py-2">{d?.name ?? "-"}</td>
+                <td className="px-3 py-2">{d?.rep ?? "-"}</td>
+                <td className="px-3 py-2">{d?.set ?? "-"}</td>
+                {hasAnyTime && <td className="px-3 py-2">{d?.time ?? "-"}</td>}
               </tr>
             ))}
           </tbody>
